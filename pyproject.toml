@@ -1,0 +1,48 @@
+[build-system]
+requires = ["uv_build>=0.8.4,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "src"
+module-root = ""
+
+[project]
+name = "CostTracking"
+version = "0.0.1"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "aiohttp>=3.13.0",
+    "aioredis>=2.0.1",
+    "alibabacloud-oss-v2>=1.2.0",
+    "asyncpg>=0.30.0",
+    "beautifulsoup4>=4.14.2",
+    "fastapi>=0.116.1",
+    "greenlet>=3.2.4",
+    "loguru>=0.7.3",
+    "openpyxl>=3.1.5",
+    "pandas>=2.3.3",
+    "pgvector>=0.4.1",
+    "psycopg2-binary>=2.9.10",
+    "pydantic>=2.11.7",
+    "pydantic-settings>=2.10.1",
+    "python-dotenv>=1.1.1",
+    "python-multipart>=0.0.20",
+    "redis>=6.4.0",
+    "requests>=2.32.5",
+    "sqlalchemy>=2.0.42",
+    "sqlalchemy-utils>=0.41.2",
+    "tenacity>=9.1.2",
+    "uvicorn>=0.35.0",
+    "xlrd>=2.0.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.1",
+]
+
+[tool.pytest.ini_options]
+addopts = "-v -s"
+testpaths = ["src/tests"]
