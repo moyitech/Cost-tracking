@@ -43,13 +43,14 @@ Cost Tracking 是一款基于前后端分离架构的Web应用，帮助用户记
 - **微信信息同步**：自动获取用户微信昵称和头像作为用户信息
 
 ### 3.5 用户体验功能
-- **主题切换**：支持深色模式和浅色模式切换，主题偏好保存到用户配置中
+- **主题切换**：支持深色模式和浅色模式切换，主题偏好保存在浏览器本地存储中，无需后端交互
 - **前后端双重表单验证**：前端进行实时验证，后端进行最终验证，确保数据有效性
 - **操作反馈**：提供明确的视觉和文字反馈，包括API请求状态的反馈
 - **响应式设计**：前端采用响应式设计，适配不同屏幕尺寸的设备
 - **加载状态**：API请求时显示加载状态，提升用户体验
 - **错误处理**：完善的错误处理机制，包括网络错误、服务器错误等的用户友好提示
 - **二维码状态管理**：微信登录二维码的生成、刷新和状态监控
+- **本地存储优化**：主题等前端偏好设置使用localStorage，减少不必要的API请求
 
 ## 4. 技术架构
 
@@ -102,6 +103,7 @@ Cost Tracking 是一款基于前后端分离架构的Web应用，帮助用户记
     unionid VARCHAR(128),
     nickname VARCHAR(255),
     avatar_url TEXT,
+    is_delete BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
   );
@@ -111,21 +113,22 @@ Cost Tracking 是一款基于前后端分离架构的Web应用，帮助用户记
   ```sql
   CREATE TABLE items (
     id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL,
     name VARCHAR(255) NOT NULL,
     purchase_date DATE NOT NULL,
     purchase_amount DECIMAL(10,2) NOT NULL,
     daily_cost DECIMAL(10,4) GENERATED ALWAYS AS (purchase_amount / GREATEST(1, CURRENT_DATE - purchase_date)) STORED,
+    is_delete BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
   );
   ```
 
-- **用户配置表(user_preferences)**：存储用户偏好设置
+- **用户配置表(user_preferences)**：存储用户偏好设置（预留扩展）
   ```sql
   CREATE TABLE user_preferences (
     id SERIAL PRIMARY KEY,
-    user_id INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,
-    theme VARCHAR(20) DEFAULT 'light',
+    user_id INTEGER UNIQUE NOT NULL,
+    is_delete BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
   );
@@ -139,24 +142,29 @@ Cost Tracking 是一款基于前后端分离架构的Web应用，帮助用户记
     state VARCHAR(128) NOT NULL,
     user_info JSONB,
     status VARCHAR(20) DEFAULT 'pending',
+    is_delete BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL
   );
   ```
 
 **索引优化**：
-- `CREATE UNIQUE INDEX idx_users_openid ON users(openid);`
-- `CREATE INDEX idx_items_user_id ON items(user_id);`
-- `CREATE INDEX idx_items_purchase_date ON items(purchase_date DESC);`
-- `CREATE INDEX idx_wechat_sessions_session_id ON wechat_sessions(session_id);`
-- `CREATE INDEX idx_wechat_sessions_expires_at ON wechat_sessions(expires_at);`
+- `CREATE UNIQUE INDEX idx_users_openid ON users(openid) WHERE is_delete = FALSE;`
+- `CREATE INDEX idx_items_user_id ON items(user_id) WHERE is_delete = FALSE;`
+- `CREATE INDEX idx_items_purchase_date ON items(purchase_date DESC) WHERE is_delete = FALSE;`
+- `CREATE INDEX idx_wechat_sessions_session_id ON wechat_sessions(session_id) WHERE is_delete = FALSE;`
+- `CREATE INDEX idx_wechat_sessions_expires_at ON wechat_sessions(expires_at) WHERE is_delete = FALSE;`
+- `CREATE INDEX idx_user_preferences_user_id ON user_preferences(user_id) WHERE is_delete = FALSE;`
+- `CREATE INDEX idx_items_user_delete ON items(user_id, is_delete);`
+- `CREATE INDEX idx_users_delete ON users(is_delete);`
 
 **PostgreSQL特性利用**：
 - **生成列**：自动计算日均成本
 - **JSONB**：存储微信用户信息的灵活结构
 - **时区感知**：所有时间字段使用TIMESTAMP WITH TIME ZONE
-- **外键约束**：确保数据完整性
-- **级联删除**：用户删除时自动清理相关数据
+- **软删除机制**：通过is_delete字段实现数据软删除，保留数据完整性
+- **部分索引**：为未删除数据创建高效索引，提升查询性能
+- **数据完整性**：应用层逻辑控制数据关联，避免外键约束带来的性能影响
 
 ## 5. 用户界面描述
 
@@ -188,7 +196,7 @@ Cost Tracking 是一款基于前后端分离架构的Web应用，帮助用户记
 - **二维码刷新**：自动检测二维码过期，提供手动刷新选项
 
 ### 5.5 交互元素
-- 主题切换按钮：点击可切换深色/浅色模式，状态保存到后端
+- 主题切换按钮：点击可切换深色/浅色模式，状态保存在浏览器本地存储
 - 表单提交按钮：添加物品记录，集成API调用
 - 删除按钮：删除物品记录，支持批量删除
 - 加载指示器：所有API请求时显示加载状态
@@ -218,8 +226,8 @@ Cost Tracking 是一款基于前后端分离架构的Web应用，帮助用户记
 - `GET /api/stats/trends` - 获取成本趋势数据
 
 ### 6.4 用户配置接口
-- `GET /api/user/preferences` - 获取用户偏好设置
-- `PUT /api/user/preferences` - 更新用户偏好设置
+- `GET /api/user/preferences` - 获取用户偏好设置（预留扩展）
+- `PUT /api/user/preferences` - 更新用户偏好设置（预留扩展）
 
 ## 7. 用户交互流程
 
@@ -260,9 +268,9 @@ Cost Tracking 是一款基于前后端分离架构的Web应用，帮助用户记
 ### 7.4 切换主题流程
 1. 用户点击顶部导航栏中的主题切换按钮
 2. 前端立即切换应用的主题（深色/浅色）
-3. 前端发送PUT请求到后端API (`/api/user/preferences`) 保存主题偏好
-4. 后端将用户偏好设置存储到数据库
-5. 用户下次登录时，前端从API获取偏好设置并应用主题
+3. 前端将主题偏好保存到浏览器本地存储（localStorage）
+4. 用户下次访问应用时，前端自动从本地存储读取并应用主题偏好
+5. 主题切换仅在前端完成，无需后端交互
 
 ### 7.5 微信扫码登录流程
 1. 用户访问应用，前端检查本地是否有有效Token
@@ -278,7 +286,7 @@ Cost Tracking 是一款基于前后端分离架构的Web应用，帮助用户记
    - 如果用户不存在：自动创建新用户账户，生成JWT Token，更新会话状态为成功
 10. 前端通过轮询 (`/api/auth/wechat/status/{session_id}`) 获取登录状态
 11. 检测到登录成功后，前端获取JWT Token并保存到本地存储
-12. 前端重定向到主页面，自动加载用户数据和偏好设置
+12. 前端重定向到主页面，自动加载用户数据，主题偏好从本地存储读取
 13. 如果二维码过期，系统自动刷新二维码，用户也可手动刷新
 
 ## 8. 浏览器兼容性要求
