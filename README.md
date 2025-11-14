@@ -57,10 +57,10 @@ Cost Tracking 是一款基于前后端分离架构的Web应用，帮助用户记
 ### 4.1 整体架构
 - **前端架构**：采用现代前端框架（React/Vue.js），构建单页应用（SPA）
 - **后端架构**：基于Python FastAPI框架，提供高性能异步RESTful API服务
-- **数据存储层**：采用PostgreSQL 14+作为主数据库，利用其ACID特性确保数据一致性
+- **数据存储层**：采用SQLite 3+作为主数据库，轻量级零配置，单文件存储
 - **缓存层**：Redis用于存储会话数据和提升热点数据访问性能
 - **部署架构**：前后端分离部署，支持Docker容器化和云原生部署
-- **数据安全**：PostgreSQL提供企业级数据安全特性，支持SSL连接和数据加密
+- **数据安全**：SQLite提供文件级别的数据保护，支持应用层加密和备份
 
 ### 4.2 前端技术栈
 - **框架**：React.js 或 Vue.js 3
@@ -74,7 +74,7 @@ Cost Tracking 是一款基于前后端分离架构的Web应用，帮助用户记
 
 ### 4.3 后端技术栈
 - **框架**：FastAPI
-- **数据库**：PostgreSQL 14+
+- **数据库**：SQLite 3+
 - **ORM**：SQLAlchemy 2.0
 - **认证授权**：JWT Token
 - **微信登录**：微信开放平台OAuth 2.0
@@ -82,7 +82,7 @@ Cost Tracking 是一款基于前后端分离架构的Web应用，帮助用户记
 - **数据验证**：Pydantic模型
 - **缓存**：Redis（用于存储微信登录会话）
 - **二维码生成**：qrcode库
-- **数据库驱动**：psycopg2 或 asyncpg（异步支持）
+- **数据库驱动**：SQLite内置驱动（无需额外安装）
 
 ### 4.4 API设计
 - **RESTful风格**：遵循REST设计原则
@@ -91,80 +91,82 @@ Cost Tracking 是一款基于前后端分离架构的Web应用，帮助用户记
 - **版本控制**：支持API版本管理
 - **分页支持**：列表接口支持分页查询
 
-### 4.5 PostgreSQL数据库设计
-**数据库版本**：PostgreSQL 14+（支持JSON字段、生成列等高级特性）
+### 4.5 SQLite数据库设计
+**数据库版本**：SQLite 3+（轻量级嵌入式数据库）
 
 **核心表设计**：
 - **用户表(users)**：通过微信登录创建的用户信息
   ```sql
   CREATE TABLE users (
-    id SERIAL PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     openid VARCHAR(128) UNIQUE NOT NULL,
     unionid VARCHAR(128),
     nickname VARCHAR(255),
     avatar_url TEXT,
     is_delete BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   );
   ```
 
 - **物品表(items)**：存储用户添加的物品记录
   ```sql
   CREATE TABLE items (
-    id SERIAL PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     name VARCHAR(255) NOT NULL,
     purchase_date DATE NOT NULL,
     purchase_amount DECIMAL(10,2) NOT NULL,
-    daily_cost DECIMAL(10,4) GENERATED ALWAYS AS (purchase_amount / GREATEST(1, CURRENT_DATE - purchase_date)) STORED,
+    daily_cost DECIMAL(10,4) DEFAULT 0.0000,
     is_delete BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   );
   ```
 
 - **用户配置表(user_preferences)**：存储用户偏好设置（预留扩展）
   ```sql
   CREATE TABLE user_preferences (
-    id SERIAL PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER UNIQUE NOT NULL,
     is_delete BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   );
   ```
 
 - **微信登录会话表(wechat_sessions)**：临时存储微信登录会话
   ```sql
   CREATE TABLE wechat_sessions (
-    id SERIAL PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id VARCHAR(128) UNIQUE NOT NULL,
     state VARCHAR(128) NOT NULL,
-    user_info JSONB,
+    user_info TEXT,
     status VARCHAR(20) DEFAULT 'pending',
     is_delete BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    expires_at TIMESTAMP WITH TIME ZONE NOT NULL
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL
   );
   ```
 
 **索引优化**：
-- `CREATE UNIQUE INDEX idx_users_openid ON users(openid) WHERE is_delete = FALSE;`
-- `CREATE INDEX idx_items_user_id ON items(user_id) WHERE is_delete = FALSE;`
-- `CREATE INDEX idx_items_purchase_date ON items(purchase_date DESC) WHERE is_delete = FALSE;`
-- `CREATE INDEX idx_wechat_sessions_session_id ON wechat_sessions(session_id) WHERE is_delete = FALSE;`
-- `CREATE INDEX idx_wechat_sessions_expires_at ON wechat_sessions(expires_at) WHERE is_delete = FALSE;`
-- `CREATE INDEX idx_user_preferences_user_id ON user_preferences(user_id) WHERE is_delete = FALSE;`
+- `CREATE UNIQUE INDEX idx_users_openid ON users(openid) WHERE is_delete = 0;`
+- `CREATE INDEX idx_items_user_id ON items(user_id) WHERE is_delete = 0;`
+- `CREATE INDEX idx_items_purchase_date ON items(purchase_date DESC) WHERE is_delete = 0;`
+- `CREATE INDEX idx_wechat_sessions_session_id ON wechat_sessions(session_id) WHERE is_delete = 0;`
+- `CREATE INDEX idx_wechat_sessions_expires_at ON wechat_sessions(expires_at) WHERE is_delete = 0;`
+- `CREATE INDEX idx_user_preferences_user_id ON user_preferences(user_id) WHERE is_delete = 0;`
 - `CREATE INDEX idx_items_user_delete ON items(user_id, is_delete);`
 - `CREATE INDEX idx_users_delete ON users(is_delete);`
 
-**PostgreSQL特性利用**：
-- **生成列**：自动计算日均成本
-- **JSONB**：存储微信用户信息的灵活结构
-- **时区感知**：所有时间字段使用TIMESTAMP WITH TIME ZONE
+**SQLite特性利用**：
+- **轻量级部署**：单文件数据库，无需额外服务器配置
+- **JSON支持**：使用TEXT字段存储JSON格式的微信用户信息
+- **简洁时间处理**：使用TIMESTAMP和CURRENT_TIMESTAMP
 - **软删除机制**：通过is_delete字段实现数据软删除，保留数据完整性
-- **部分索引**：为未删除数据创建高效索引，提升查询性能
-- **数据完整性**：应用层逻辑控制数据关联，避免外键约束带来的性能影响
+- **部分索引**：SQLite 3.8.0+支持部分索引，为未删除数据创建高效索引
+- **数据完整性**：应用层逻辑控制数据关联，简化数据库设计
+- **零配置**：无需复杂的数据库配置和维护
+- **ACID支持**：内置事务支持，保证数据一致性
 
 ## 5. 用户界面描述
 

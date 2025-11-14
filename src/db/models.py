@@ -1,7 +1,6 @@
 from sqlalchemy import Column, String, Text, Integer, Boolean, DateTime, DECIMAL, Date
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
 Base = declarative_base()
@@ -9,8 +8,8 @@ Base = declarative_base()
 
 class TimestampMixin:
     """提供自动时间戳功能的混入类"""
-    created_at = Column(DateTime(timezone=True), nullable=False, default=func.now(), comment='创建时间')
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=func.now(), onupdate=func.now(), comment='更新时间')
+    created_at = Column(DateTime, nullable=False, default=func.now(), comment='创建时间')
+    updated_at = Column(DateTime, nullable=False, default=func.now(), onupdate=func.now(), comment='更新时间')
 
 
 class SoftDeleteMixin:
@@ -77,9 +76,9 @@ class WechatSession(Base, TimestampMixin, SoftDeleteMixin):
     id = Column(Integer, primary_key=True, autoincrement=True, comment='会话ID')
     session_id = Column(String(128), unique=True, nullable=False, comment='会话ID')
     state = Column(String(128), nullable=False, comment='状态参数')
-    user_info = Column(JSONB, nullable=True, comment='微信用户信息')
+    user_info = Column(Text, nullable=True, comment='微信用户信息（JSON格式）')
     status = Column(String(20), nullable=False, default='pending', comment='会话状态')
-    expires_at = Column(DateTime(timezone=True), nullable=False, comment='过期时间')
+    expires_at = Column(DateTime, nullable=False, comment='过期时间')
 
     def __repr__(self):
         return f"<WechatSession(id={self.id}, session_id={self.session_id}, status={self.status})>"

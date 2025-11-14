@@ -1,35 +1,41 @@
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from typing import AsyncGenerator
-from sqlalchemy_utils import database_exists, create_database
-from sqlalchemy import text, select, update, delete, insert
+from sqlalchemy import text, select, update, delete, insert, create_engine
 from src.conf.env import settings
 from src.db.models import Base
+import os
 
-# Convert sync URL to async URL
-sync_url = settings.BIZ_DB_CONNECTION
-async_url = sync_url.replace("postgresql://", "postgresql+asyncpg://")
+# SQLite数据库配置
+db_path = settings.BIZ_DB_CONNECTION.replace("sqlite:///", "")
+# 确保数据库目录存在
+db_dir = os.path.dirname(db_path)
+if db_dir and not os.path.exists(db_dir):
+    os.makedirs(db_dir, exist_ok=True)
 
-if not database_exists(sync_url):
-    create_database(sync_url)
-
+# 异步SQLite引擎
+async_url = settings.BIZ_DB_CONNECTION.replace("sqlite:///", "sqlite+aiosqlite:///")
 engine = create_async_engine(
     async_url,
-    connect_args={"server_settings": {"timezone": "Asia/Shanghai"}},
-    pool_size=20,  # 连接池大小
-    max_overflow=10,  # 最大溢出连接数
-    pool_pre_ping=True,  # 连接前测试连接
-    # pool_recycle=28800,  # 8小时回收连接
-    echo=False  # 设为True可以看到SQL语句
+    echo=False,  # 设为True可以看到SQL语句
+    connect_args={
+        "check_same_thread": False,  # SQLite特有配置，允许多线程使用
+        "timeout": 20,  # 连接超时时间
+    },
+    pool_size=10,  # SQLite连接池大小
+    max_overflow=0,  # SQLite不建议溢出连接
 )
 
-# todo all 在这里 migrate
-# Note: create_all is sync, so we use sync engine for this operation
-from sqlalchemy import create_engine
-
+# 同步引擎用于创建表结构
 sync_engine = create_engine(
-    sync_url,
-    connect_args={"options": "-c timezone=Asia/Shanghai"}
+    settings.BIZ_DB_CONNECTION,
+    echo=False,
+    connect_args={
+        "check_same_thread": False,
+        "timeout": 20,
+    }
 )
+
+# 创建表结构
 Base.metadata.create_all(bind=sync_engine)  # type: ignore
 
 DBSession = async_sessionmaker(
