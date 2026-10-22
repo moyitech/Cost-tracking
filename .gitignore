@@ -26,6 +26,7 @@ htmlcov/
 node_modules/
 unpackage/
 .taro/
+.swc/
 *.tsbuildinfo
 
 # Build output and logs
