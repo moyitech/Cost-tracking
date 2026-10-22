@@ -1,0 +1,38 @@
+# Generated reports and previews
+/output/
+/tmp/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+project.private.config.json
+
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.egg-info/
+
+# Frontend dependencies and generated files
+node_modules/
+unpackage/
+.taro/
+*.tsbuildinfo
+
+# Build output and logs
+dist/
+build/
+*.log
+
+# OS and IDE files
+.DS_Store
+.idea/
