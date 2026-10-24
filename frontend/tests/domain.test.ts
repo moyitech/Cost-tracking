@@ -3,8 +3,27 @@ import assert from 'node:assert/strict'
 import { ItemInput, Ledger, migrateLedger, metrics, newItem, parseMoney, spaceDaily, validateDisposal, validateExpense, validateInput } from '../src/domain'
 import { applyCommand } from '../src/commands'
 
-const input: ItemInput = { name: '电脑', purchaseAmount: 800000, purchaseDate: '2025-06-07', category: '数码', brand: '', model: '', image: '', location: '', channel: '', serial: '', warranty: '', note: '' }
+const input: ItemInput = { name: '电脑', purchaseAmount: 800000, purchaseDate: '2025-06-07', image: '', note: '' }
 const item = () => newItem(input, 'personal', 'computer')
+
+test('retired attributes in old snapshots and drafts never return after create or edit', () => {
+  const retired = { category: '数码', brand: '旧品牌', model: '旧型号', location: '书房', channel: '商店', serial: 'SN', warranty: '一年' }
+  const old = { ...item(), ...retired }
+  const snapshot: Ledger = { version: 1, items: [old], spaces: [{ id: 'personal', name: '个人', kind: 'personal', role: 'admin', members: [] }] }
+  const migrated = migrateLedger(snapshot)
+  assert.equal(migrated.items[0].name, old.name)
+  assert.deepEqual(migrated.items[0].history, old.history)
+  assert.equal(migrated.items[0].purchaseAmount, old.purchaseAmount)
+  assert.equal(migrateLedger(migrated), migrated)
+  const created = newItem({ ...input, ...retired }, 'personal')
+  const edited = applyCommand(migrated, { type: 'edit', id: old.id, revision: old.revision, input: { ...input, ...retired, note: '保留备注' } })
+  for (const key of Object.keys(retired)) {
+    assert.equal(key in migrated.items[0], false)
+    assert.equal(key in created, false)
+    assert.equal(key in edited.items[0], false)
+  }
+  assert.equal(edited.items[0].note, '保留备注')
+})
 const ledger = (): Ledger => ({ version: 1, items: [item()], spaces: [
   { id: 'personal', name: '个人', kind: 'personal', role: 'admin', members: [] },
   { id: 'family', name: '家庭', kind: 'family', role: 'editor', members: [] },

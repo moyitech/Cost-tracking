@@ -1,0 +1,80 @@
+// Only the stationary bar samples the backdrop. The lens shares that material;
+// nested blur filters would add GPU work on every interaction frame.
+.tab-bar {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 25;
+  height: calc(56px + var(--safe-bottom, env(safe-area-inset-bottom, 0px)));
+  padding: 0 12px calc(4px + var(--safe-bottom, env(safe-area-inset-bottom, 0px)));
+  background: transparent; display: flex; justify-content: center; pointer-events: none;
+}
+.tab-bar::before {
+  content: ''; position: absolute; inset: -12px 0 0;
+  background: linear-gradient(180deg, rgba(247, 249, 248, 0) 25%, rgba(247, 249, 248, .32));
+  pointer-events: none;
+}
+.tab-bar-inner {
+  position: relative; width: 100%; max-width: 520px; height: 52px; padding: 3px;
+  display: flex; align-items: center; gap: 2px;
+  background: #f3f6f4; border: 1px solid rgba(255, 255, 255, .72); border-radius: 28px;
+  box-shadow: inset 0 -1px 0 rgba(24, 38, 30, .08), 0 3px 12px rgba(24, 38, 30, .08), 0 0 0 .5px rgba(24, 38, 30, .08);
+  pointer-events: auto; isolation: isolate; touch-action: none; user-select: none; -webkit-user-select: none;
+}
+.tab-bar-inner::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7); pointer-events: none;
+}
+.tab-bar-lens {
+  position: absolute; z-index: 0; top: 50%; left: 3px; margin-top: -22px;
+  width: calc((100% - 12px) / 4); height: 44px; border-radius: 999px;
+  transform: translateX(calc(var(--tab-index, 0) * 100% + var(--tab-index, 0) * 2px));
+  transform-origin: center; pointer-events: none;
+}
+.tab-bar-lens-rest, .tab-bar-lens-surface { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; }
+.tab-bar-lens-rest { background: rgba(30, 44, 36, .085); }
+.tab-bar-lens-surface {
+  opacity: 0;
+  background: linear-gradient(145deg, rgba(255, 255, 255, .48), rgba(255, 255, 255, .1) 48%, rgba(220, 234, 227, .24));
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, .95), inset 1px 0 0 rgba(255, 255, 255, .78), inset -1px -1px 1px rgba(77, 105, 91, .2), 0 2px 5px rgba(26, 43, 33, .12), 0 0 0 .5px rgba(77, 105, 91, .12);
+}
+.tab-bar-lens-surface::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  background: linear-gradient(120deg, rgba(255, 255, 255, .65), transparent 22%, transparent 77%, rgba(255, 255, 255, .35));
+}
+.tab-bar-inner[data-moving='true'] .tab-bar-lens,
+.tab-bar-inner[data-moving='true'] .tab-item-content { will-change: transform; }
+.tab-item {
+  position: relative; z-index: 1; flex: 1; min-width: 0; min-height: 44px; height: 44px;
+  padding: 0; border-radius: 24px; font-size: 11px; line-height: 14px; font-weight: 500;
+  color: #293b31; transition: color 100ms ease;
+}
+.tab-item-content {
+  width: 100%; height: 44px; padding: 2px 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 2px; white-space: nowrap;
+  pointer-events: none; transform-origin: center;
+}
+.tab-item .icon { width: 24px !important; height: 24px !important; filter: brightness(.5); pointer-events: none; }
+@for $index from 0 through 3 {
+  .tab-bar-inner[data-preview='#{$index}'] .tab-item-#{$index} { color: #123f32; }
+  .tab-bar-inner[data-preview='#{$index}'] .tab-item-#{$index} .icon {
+    filter: brightness(0) saturate(100%) invert(26%) sepia(23%) saturate(1350%) hue-rotate(115deg) brightness(90%) contrast(95%);
+  }
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .tab-bar-inner {
+    // The minimum fill also protects 11px labels over dark images. With the
+    // resting selection overlay, #123f32 retains >= 4.67:1 over a black backdrop.
+    background: linear-gradient(155deg, rgba(255, 255, 255, .76), rgba(246, 250, 248, .70));
+    -webkit-backdrop-filter: blur(18px) saturate(1.35); backdrop-filter: blur(18px) saturate(1.35);
+  }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .tab-bar-inner { background: #f7faf8; border-color: #74867b; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .tab-bar-lens-rest { opacity: 1 !important; background: #dce9e0; box-shadow: inset 0 0 0 1px #74867b; }
+  .tab-bar-lens-surface { display: none; }
+  .tab-item-content { transform: none !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tab-item { transition: none; }
+  .tab-item-content { transform: none !important; }
+  .tab-bar-lens-rest { opacity: 1 !important; }
+  .tab-bar-lens-surface { display: none; }
+}

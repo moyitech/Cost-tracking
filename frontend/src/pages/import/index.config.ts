@@ -1,1 +1,1 @@
-export default definePageConfig({ navigationBarTitleText: 'AI 智能识别校对' })
+export default definePageConfig({ navigationBarTitleText: '记录新物品' })

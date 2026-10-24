@@ -1,13 +1,13 @@
 {
   "miniprogramRoot": "dist/weapp/",
   "projectname": "objet-ledger",
-  "description": "物序 · 耐用品价值管理",
-  "appid": "wx2f531f3d909eca3a",
+  "description": "用本 · 耐用品价值管理",
+  "appid": "wxa16a850eb540b218",
   "compileType": "miniprogram",
   "setting": {
     "es6": true,
     "minified": true,
-    "urlCheck": false,
+    "urlCheck": true,
     "postcss": false,
     "compileWorklet": false,
     "uglifyFileName": false,

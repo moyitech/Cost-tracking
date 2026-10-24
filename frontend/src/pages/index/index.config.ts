@@ -1,1 +1,1 @@
-export default definePageConfig({ navigationBarTitleText: '物序 · Items' })
+export default definePageConfig({ navigationBarTitleText: '用本', enablePullDownRefresh: true, enableShareAppMessage: true })

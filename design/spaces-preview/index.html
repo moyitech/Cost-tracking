@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#F7F9F8">
+  <title>用本 · 空间交互预览</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="preview.css">
+  <script src="preview.js" defer></script>
+</head>
+<body>
+  <main class="studio">
+    <aside class="inspector" aria-label="设计预览工具">
+      <div class="studio-brand"><span class="brand">用<span>本</span></span><span class="studio-label">交互设计预览</span></div>
+      <div class="studio-intro"><p class="eyebrow">空间 · 重新整理</p><h1>物品有归属，<br>空间有秩序。</h1><p>自己的收藏，家里的日常。<br>让切换、共享和管理，各在其位。</p></div>
+      <fieldset class="scenario-control"><legend>体验不同身份</legend><div class="scenarios">
+        <button type="button" data-scenario="personal" aria-pressed="true">个人空间<span>只属于自己</span></button>
+        <button type="button" data-scenario="admin" aria-pressed="false">家庭管理者<span>管理与邀请</span></button>
+        <button type="button" data-scenario="editor" aria-pressed="false">家庭编辑者<span>一起整理物品</span></button>
+        <button type="button" data-scenario="viewer" aria-pressed="false">家庭查看者<span>查看物品与记录</span></button>
+      </div></fieldset>
+      <div class="preview-options"><label>画面宽度<select id="preview-width"><option value="320">320 px</option><option value="390" selected>390 px</option><option value="430">430 px</option></select></label><label>外观<select id="preview-theme"><option value="auto">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label></div>
+      <label class="large-toggle"><input id="large-text" type="checkbox"><span>大字号检查</span><span class="toggle-track" aria-hidden="true"></span></label>
+      <button type="button" class="reset-preview" id="reset-preview">重置预览<span aria-hidden="true">↺</span></button>
+      <p class="studio-note">独立交互样稿 · 模拟数据<br>图片仅在本地显示，刷新后恢复初始状态。</p>
+    </aside>
+    <section class="stage" aria-label="手机预览">
+      <div class="device" id="device">
+        <div class="screen" id="screen">
+          <div id="device-app" class="device-app">
+            <div class="status-bar" aria-hidden="true"><span>9:41</span><span class="dynamic-island"></span><span class="status-icons"><svg viewBox="0 0 18 14"><path d="M1 12V9m4 3V7m4 5V4m4 8V1"/></svg><svg viewBox="0 0 20 16"><path d="M2 5a12 12 0 0 1 16 0M5 8a8 8 0 0 1 10 0m-7 3a3 3 0 0 1 4 0"/><circle cx="10" cy="14" r="1"/></svg><span class="battery"></span></span></div>
+            <header id="app-header" class="app-header"></header>
+            <div id="scope-bar" class="scope-bar"></div>
+            <div id="page-scroll" class="page-scroll" tabindex="-1"><div id="page-content" class="page-content"></div></div>
+            <nav id="tab-bar" class="tab-bar" aria-label="主导航"></nav>
+          </div>
+          <div class="sheet-layer" id="sheet-layer" hidden>
+            <div class="scrim" data-action="close-sheet"></div>
+            <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" tabindex="-1">
+              <div class="sheet-grip" aria-hidden="true"></div>
+              <header id="sheet-header" class="sheet-header"></header>
+              <div id="sheet-body" class="sheet-body"></div>
+              <div id="sheet-footer" class="sheet-footer" hidden></div>
+            </section>
+          </div>
+          <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+          <div class="home-indicator" aria-hidden="true"></div>
+        </div>
+      </div>
+      <p class="stage-caption">用本 · 空间页 <span>点击头像或空间名称，开始体验</span></p>
+    </section>
+  </main>
+</body>
+</html>

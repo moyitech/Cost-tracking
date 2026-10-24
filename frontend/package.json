@@ -3,10 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "preview:ai": "vite --config preview/vite.config.ts",
+    "build:ai-preview": "vite build --config preview/vite.config.ts",
     "dev:h5": "taro build --type h5 --watch",
     "dev:weapp": "taro build --type weapp --watch",
     "build:h5": "taro build --type h5",
     "build:weapp": "taro build --type weapp",
+    "check:wxss": "node scripts/check-wxss.mjs",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts"
   },

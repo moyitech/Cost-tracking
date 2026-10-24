@@ -4,7 +4,7 @@
     "jsx": "react-jsx", "strict": true, "esModuleInterop": true,
     "allowSyntheticDefaultImports": true, "resolveJsonModule": true,
     "skipLibCheck": true, "noEmit": true, "types": ["@tarojs/taro", "node"],
-    "baseUrl": "."
+    "baseUrl": ".", "paths": { "@preset-assets": ["src/image-presets.remote.ts"] }
   },
-  "include": ["src", "config", "tests", "types"]
+  "include": ["src", "config", "tests", "types", "preview"]
 }

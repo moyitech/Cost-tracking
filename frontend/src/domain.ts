@@ -1,21 +1,38 @@
+import type { ServerMetrics } from './api-types'
+import { validateItemImage } from './item-image'
 export type Status = 'active' | 'sold' | 'retired'
 export type Role = 'admin' | 'editor' | 'viewer'
-export type Space = { id: string; name: string; kind: 'personal' | 'family'; role: Role; members: { id: string; name: string; role: Role }[] }
-export type Expense = { id: string; category: string; amount: number; date: string; note: string }
+export type Space = { id: string; name: string; kind: 'personal' | 'family'; role: Role; avatar?: string; avatarFileId?: string; memberCount?: number; itemCount?: number; members: { id: string; name: string; role: Role; userId?: string; revision?: number }[] }
+export type Profile = { id: string; displayName: string; avatar?: string; avatarFileId?: string }
+export type Expense = { id: string; category: string; amount: number; date: string; note: string; attachmentFileIds?: string[] }
 export type Audit = { id: string; title: string; occurredOn: string | null; recordedAt: string; actor: string; detail?: string }
 export type Item = {
-  id: string; spaceId: string; name: string; category: string; brand: string; model: string;
-  image: string; purchaseAmount: number | null; purchaseDate: string | null;
+  id: string; spaceId: string; name: string; createdAt?: string;
+  image: string; imageFileId?: string; imagePresetId?: string; serverMetrics?: ServerMetrics; purchaseAmount: number | null; purchaseDate: string | null;
   status: Status; disposalDate: string | null; recoveryAmount: number | null;
-  location: string; channel: string; serial: string; warranty: string; note: string; attachments?: { name: string; path: string }[];
+  note: string; attachments?: { name: string; path: string; fileId?: string }[];
   expenses: Expense[]; history: Audit[]; deleted: boolean; revision: number; importKey?: string;
 }
-export type ItemInput = Pick<Item, 'name' | 'category' | 'brand' | 'model' | 'image' | 'purchaseAmount' | 'purchaseDate' | 'location' | 'channel' | 'serial' | 'warranty' | 'note' | 'attachments'>
-export type Invitation = { id: string; code: string; spaceId: string; role: 'editor' | 'viewer'; status: 'pending' | 'accepted' | 'revoked'; memberId?: string }
-export type Ledger = { version: 1; items: Item[]; spaces: Space[]; invitations?: Invitation[] }
+export type ItemInput = Pick<Item, 'name' | 'image' | 'imageFileId' | 'imagePresetId' | 'purchaseAmount' | 'purchaseDate' | 'note' | 'attachments'>
+export type Invitation = { id: string; code: string; spaceId: string; role: 'editor' | 'viewer'; status: 'pending' | 'accepted' | 'revoked'; memberId?: string; createdAt?: string; expiresAt?: string; acceptedMembers?: string[] }
+export type Ledger = { version: 1; items: Item[]; spaces: Space[]; profile?: Profile; invitations?: Invitation[]; removals?: Record<string, string>; resultSpaceId?: string }
 export const statusLabels: Record<Status, string> = { active: '在用', sold: '已出售', retired: '已淘汰' }
 export const roleLabels: Record<Role, string> = { admin: '管理者', editor: '编辑者', viewer: '查看者' }
-export const categories = ['数码', '数码摄影', '生活家电', '户外运动', '家具', '存储耗材与配件', '未分类']
+// Compatibility only: old local drafts and snapshots must not revive retired fields.
+export const retiredItemFields: readonly string[] = ['category', 'brand', 'model', 'location', 'channel', 'serial', 'warranty']
+export function stripRetiredItemFields<T extends object>(value: T): T {
+  return Object.fromEntries(Object.entries(value).filter(([key]) => !retiredItemFields.includes(key))) as T
+}
+// Older local archives can recover creation time from their original archive event.
+export function newestItemsFirst(items: Item[]): Item[] {
+  const created = (item: Item) => {
+    const value = item.createdAt || item.history.find(event => /建档/.test(event.title))?.recordedAt
+    const timestamp = value ? Date.parse(value) : NaN
+    return Number.isFinite(timestamp) ? timestamp : 0
+  }
+  return [...items].sort((a, b) => created(b) - created(a))
+}
+export const isMilestone = (event: Audit) => event.title !== '编辑物品资料'
 export const isDisposed = (item: Pick<Item, 'status'>) => item.status === 'sold' || item.status === 'retired'
 export const canEdit = (space?: Space) => !!space && space.role !== 'viewer'
 export function today() {
@@ -43,6 +60,11 @@ export function parseMoney(value: string, required = false): number | null {
 export const moneyInput = (cents: number | null) => cents === null ? '' : (cents / 100).toFixed(2)
 export const money = (cents: number | null, digits = 2) => cents === null ? '待补充' : (cents / 100).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })
 export function metrics(item: Item, now = today()) {
+  if (item.serverMetrics && (isDisposed(item) || item.serverMetrics.as_of_date === now)) {
+    const m = item.serverMetrics
+    const daily = isDisposed(item) ? m.actual_daily_yuan : m.current_daily_yuan
+    return { extra: m.extra_cents, known: m.known_investment_cents, total: m.total_investment_cents, days: m.holding_days, net: isDisposed(item) ? m.net_cost_cents : m.total_investment_cents, daily: daily === null ? null : Number(daily) * 100 }
+  }
   const extra = item.expenses.reduce((sum, e) => sum + e.amount, 0)
   const known = (item.purchaseAmount ?? 0) + extra
   const total = item.purchaseAmount === null ? null : known
@@ -54,11 +76,13 @@ export function metrics(item: Item, now = today()) {
 }
 export function spaceDaily(items: Item[], now = today()) {
   const holding = items.filter(i => !i.deleted && !isDisposed(i))
-  const values = holding.map(i => metrics(i, now).daily)
+  // Aggregate raw daily values before rounding the displayed total.
+  const values = holding.map(i => metrics({ ...i, serverMetrics: undefined }, now).daily)
   return { amount: values.reduce<number>((sum, value) => sum + (value ?? 0), 0), incomplete: values.filter(v => v === null).length, count: holding.length }
 }
 export function validateInput(input: ItemInput, now = today()) {
   if (!input.name.trim()) throw new Error('请填写物品名称')
+  validateItemImage(input)
   validateDate(input.purchaseDate, '购买日期', now)
   if (input.purchaseAmount !== null && (!Number.isSafeInteger(input.purchaseAmount) || input.purchaseAmount < 0)) throw new Error('购入金额无效')
 }
@@ -85,14 +109,15 @@ export function audit(title: string, occurredOn: string | null = today(), detail
 }
 export function newItem(input: ItemInput, spaceId: string, id = uid()): Item {
   validateInput(input)
-  return { ...input, name: input.name.trim(), category: input.category || '未分类', id, spaceId, status: 'active', disposalDate: null, recoveryAmount: null, expenses: [], history: [audit('购入建档', input.purchaseDate)], deleted: false, revision: 1 }
+  return { ...stripRetiredItemFields(input), name: input.name.trim(), id, spaceId, createdAt: new Date().toISOString(), status: 'active', disposalDate: null, recoveryAmount: null, expenses: [], history: [audit('购入建档', input.purchaseDate)], deleted: false, revision: 1 }
 }
 
 // Compatibility boundary for snapshots saved before the idle state was removed.
 export type StoredLedger = Omit<Ledger, 'items'> & { items: (Omit<Item, 'status'> & { status: Status | 'idle' })[] }
 export function migrateLedger(value: StoredLedger): Ledger {
-  if (!value.items.some(item => item.status === 'idle')) return value as Ledger
-  return { ...value, items: value.items.map(item => item.status === 'idle'
-    ? { ...item, status: 'active', revision: item.revision + 1 }
-    : item as Item) }
+  if (!value.items.some(item => item.status === 'idle' || Object.keys(item).some(key => retiredItemFields.includes(key)))) return value as Ledger
+  return { ...value, items: value.items.map(item => {
+    const clean = stripRetiredItemFields(item)
+    return clean.status === 'idle' ? { ...clean, status: 'active', revision: clean.revision + 1 } : clean as Item
+  }) }
 }

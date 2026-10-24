@@ -1,0 +1,64 @@
+:root { font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif; color: #1e3530; background: #f7f9f8; font-synthesis: none; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, input { font: inherit; }
+button { cursor: pointer; }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid #0b6b5a; outline-offset: 4px; }
+main { max-width: 1248px; margin: auto; padding: 0 48px; }
+.lab-header { height: 96px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #dce7e1; }
+.wordmark { text-decoration: none; color: #1e3530; font-size: 22px; font-weight: 650; letter-spacing: 2px; }
+.wordmark span { font-size: 10px; letter-spacing: 3px; margin-left: 12px; font-weight: 500; }
+.lab-badge { font-size: 12px; color: #627269; }
+.lab-intro { padding: 56px 0 34px; }
+.eyebrow { font-size: 10px; letter-spacing: 2.5px; color: #627269; margin: 0 0 18px; }
+h1 { font-size: clamp(28px, 4vw, 42px); font-weight: 550; letter-spacing: -1px; margin: 0 0 18px; }
+.intro-copy, .section-title p:not(.eyebrow) { font-size: 14px; line-height: 1.8; color: #627269; margin: 0; }
+.lab-controls { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+.stage-controls { display: flex; padding: 4px; background: #eaf0ec; border-radius: 13px; }
+.stage-controls button { border: 0; background: transparent; color: #627269; min-height: 44px; padding: 8px 22px; border-radius: 10px; font-size: 13px; }
+.stage-controls button[aria-pressed=true] { background: white; color: #1e3530; box-shadow: 0 2px 6px #1e353010; }
+.play-controls, .dialog-controls { display: flex; gap: 8px; }
+.play-controls button, .dialog-controls button, .preview-toggles button { min-height: 44px; padding: 8px 14px; border: 1px solid #dce7e1; background: transparent; border-radius: 10px; color: #1e3530; font-size: 13px; }
+.motion-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 20px; }
+.motion-study { border: 1px solid #dce7e1; border-radius: 22px; overflow: hidden; background: #fff; }
+.study-heading { display: flex; align-items: center; padding: 14px 18px; gap: 10px; border-bottom: 1px solid #e9eeeb; }
+.study-heading > span { color: #627269; font-size: 11px; font-variant-numeric: tabular-nums; }
+.study-heading h2 { margin: 0; font-size: 15px; font-weight: 550; }
+.study-heading button { margin-left: auto; min-height: 44px; border: 0; background: none; color: #0b6b5a; font-size: 12px; }
+.preview-scene { position: relative; height: 360px; background: #f7f9f8; }
+.preview-scene-header { position: absolute; top: 20px; left: 20px; display: flex; flex-direction: column; gap: 5px; font-size: 14px; font-weight: 550; }
+.preview-scene-header > span + span { font-size: 11px; font-weight: 400; color: #627269; }
+.preview-scene-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; width: 100%; padding: 0 24px; }
+.preview-status { font-size: 17px; line-height: 1.5; margin-top: 8px; }
+.preview-progress-slot { width: 144px; height: 5px; margin-top: 14px; }
+.preview-progress { height: 5px; overflow: hidden; background: #e2eae5; border-radius: 6px; }
+.preview-progress > div { height: 100%; border-radius: inherit; background: #0b6b5a; transition: width .24s ease-out; }
+.study-description { padding: 20px; border-top: 1px solid #e9eeeb; }
+.study-description h3 { font-size: 14px; font-weight: 550; margin: 0 0 8px; }
+.study-description p { font-size: 12px; color: #627269; line-height: 1.8; margin: 0; }
+.duplicate-section { margin-top: 72px; padding-top: 36px; border-top: 1px solid #dce7e1; }
+.section-title { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 26px; }
+.section-title h2 { font-size: 26px; font-weight: 550; margin: 0 0 10px; letter-spacing: -.5px; }
+.preview-toggles { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12px; }
+.preview-toggles label { display: flex; align-items: center; gap: 5px; min-height: 44px; cursor: pointer; }
+input { accent-color: #0b6b5a; }
+.duplicate-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 20px; align-items: start; }
+.sample-label { font-size: 11px; color: #627269; letter-spacing: .5px; }
+.duplicate-grid .duplicate-notice { margin-top: 0; }
+.preview-large-text .duplicate-notice-title { font-size: 22px; }
+.preview-large-text .duplicate-notice-caption, .preview-large-text .duplicate-notice-tag, .preview-large-text .duplicate-notice-confirmation { font-size: 16px; }
+.preview-large-text .duplicate-notice-name, .preview-large-text .duplicate-notice-button { font-size: 20px; }
+.skip-result { padding: 24px; border: 1px dashed #aac9ba; border-radius: 18px; display: flex; flex-direction: column; gap: 16px; font-size: 14px; }
+.skip-result button { min-height: 44px; background: white; border: 1px solid #dce7e1; border-radius: 10px; color: #0b6b5a; }
+.lab-footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 32px 0; margin-top: 64px; border-top: 1px solid #dce7e1; color: #627269; font-size: 11px; }
+.preview-dialog { width: min(440px, calc(100% - 24px)); max-height: calc(100dvh - 24px); padding: 0; border: 1px solid #dce7e1; border-radius: 24px; color: #1e3530; background: #f7f9f8; }
+.preview-dialog::backdrop { background: rgba(20,40,30,.32); }
+.dialog-heading { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid #dce7e1; }
+.dialog-heading h2 { font-size: 16px; font-weight: 550; margin: 0; }
+.dialog-heading button { border: 0; background: none; color: #0b6b5a; min-height: 44px; }
+.preview-dialog .preview-scene { height: min(560px, 65dvh); min-height: 250px; }
+.preview-dialog .recognition-motion { transform: scale(1.25); margin: 18px 0; }
+.dialog-controls { padding: 12px 20px 20px; justify-content: center; }
+@media (max-width: 960px) { main { padding: 0 24px; } .motion-grid, .duplicate-grid { gap: 12px; } .study-heading { padding: 10px; gap: 7px; } }
+@media (max-width: 720px) { main { padding: 0 16px; } .lab-header { height: 72px; } .lab-intro { padding-top: 36px; } .motion-grid, .duplicate-grid { grid-template-columns: 1fr; gap: 24px; } .preview-scene { height: 400px; } .study-heading { padding: 10px 18px; } .duplicate-section { margin-top: 48px; } .section-title h2 { font-size: 23px; } }
+@media (prefers-reduced-motion: reduce) { .preview-progress > div { transition: none; } }

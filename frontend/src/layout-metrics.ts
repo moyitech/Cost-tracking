@@ -10,9 +10,22 @@ export function nativeLayout(window: WindowMetrics, menu?: MenuMetrics) {
   return { statusTop, navHeight, headerHeight: statusTop + navHeight, capsuleRight, safeBottom }
 }
 
-export function sheetHeight(windowHeight: number, baseHeight: number, keyboardHeight = 0) {
+export function sheetHeight(windowHeight: number, baseHeight: number, keyboardHeight = 0, topInset = 0) {
   // Some WeChat versions resize the window when the keyboard opens; others don't.
   // Using the smaller visible area avoids subtracting the keyboard twice.
   const visible = keyboardHeight > 0 ? Math.min(windowHeight, baseHeight - keyboardHeight) : windowHeight
-  return Math.max(0, visible - 8)
+  // The native WeChat capsule stays above popups. Keep the entire sheet below
+  // the status/navigation area, even when its content fills the visible window.
+  return Math.max(0, visible - Math.max(0, topInset) - 8)
+}
+
+export function keyboardViewport(windowHeight: number, baseHeight: number, keyboardHeight: number) {
+  const visibleHeight = Math.max(0, Math.min(windowHeight, baseHeight - Math.max(0, keyboardHeight)))
+  return { visibleHeight, bottom: Math.max(0, windowHeight - visibleHeight) }
+}
+
+// A resize can arrive before the keyboard event. Do not replace the unoccluded
+// height with that smaller window, or the keyboard will be counted twice.
+export function unoccludedWindow(previous: WindowMetrics, next: WindowMetrics): WindowMetrics {
+  return { ...next, windowHeight: next.windowWidth === previous.windowWidth ? Math.max(previous.windowHeight, next.windowHeight) : next.windowHeight }
 }
