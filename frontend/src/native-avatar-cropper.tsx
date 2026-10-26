@@ -7,8 +7,8 @@ import { useAdaptiveLayout } from './layout'
 import './avatar-cropper.scss'
 
 /** Native Taro controls work in desktop WeChat and DevTools without wx.cropImage. */
-export function NativeAvatarCropper({ src, onConfirm, onCancel, onProcessingChange, onLayoutChange }: {
-  src: string; onConfirm: (image: string) => void; onCancel: () => void
+export function NativeAvatarCropper({ src, subject = '头像', onConfirm, onCancel, onProcessingChange, onLayoutChange }: {
+  src: string; subject?: string; onConfirm: (image: string) => void; onCancel: () => void
   onProcessingChange: (busy: boolean) => void; onLayoutChange: () => void
 }) {
   const layout = useAdaptiveLayout()
@@ -43,7 +43,7 @@ export function NativeAvatarCropper({ src, onConfirm, onCancel, onProcessingChan
     finally { lock.current = false; if (active.current) { setBusy(false); onProcessingChange(false) } }
   }
   return <View className='avatar-cropper native-avatar-cropper'>
-    <Text className='avatar-crop-intro'>移动、缩放照片，选好头像的位置。</Text>
+    <Text className='avatar-crop-intro'>移动、缩放照片，选好{subject}的位置。</Text>
     <View className='avatar-crop-frame native-avatar-crop-frame' style={{ width: `${edge}px`, height: `${edge}px` }}>
       {source && rect ? <MovableArea className='avatar-crop-movable-area' style={{ width: `${edge}px`, height: `${edge}px` }}>
         <MovableView className='avatar-crop-movable-photo' direction='all' inertia={false} outOfBounds={false} animation={false} disabled={busy}

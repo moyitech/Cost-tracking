@@ -6,7 +6,7 @@ import { Space, roleLabels, uid } from './domain'
 import { fileUrl, mockEnabled, readMediaEpoch, subscribeMedia } from './services'
 import { scannedInvitationPath } from './invitation-share'
 import { useLedger } from './store'
-import { cropAvatarImage, persistAvatarPreview } from './local-image'
+import { cropAvatarImage, persistSquarePreview } from './local-image'
 import { imageActionCancelled } from './avatar-crop'
 import { BrowserAvatarCropper } from './avatar-cropper'
 import { NativeAvatarCropper } from './native-avatar-cropper'
@@ -60,7 +60,7 @@ export function AvatarEditor({ scope, spaceId, onClose }: { scope: Space['kind']
     void submit(async () => {
       let image = pending.image
       if (mockEnabled && pending.cropped) {
-        image = await persistAvatarPreview(image)
+        image = await persistSquarePreview(image)
         if (!active.current) throw new Error('头像编辑已关闭，请重新打开')
         setPending({ image, fileId: undefined, cropped: false })
       }

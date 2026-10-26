@@ -5,7 +5,7 @@ import type { ImageSize } from './image-processing'
 import './avatar-cropper.scss'
 
 /** H5-only counterpart to wx.cropImage; confirm exports pixels, not a CSS mask. */
-export function BrowserAvatarCropper({ src, onConfirm, onCancel }: { src: string; onConfirm: (image: string) => void; onCancel: () => void }) {
+export function BrowserAvatarCropper({ src, subject = '头像', onConfirm, onCancel }: { src: string; subject?: string; onConfirm: (image: string) => void; onCancel: () => void }) {
   const frame = useRef<HTMLDivElement>(null)
   const image = useRef<HTMLImageElement>(null)
   const drag = useRef<{ id: number; x: number; y: number } | null>(null)
@@ -45,8 +45,8 @@ export function BrowserAvatarCropper({ src, onConfirm, onCancel }: { src: string
     } catch (e) { setError(e instanceof Error ? e.message : '图片裁剪失败，请重新选择'); setBusy(false) }
   }
   return <div className='avatar-cropper' onKeyDown={event => { if (event.key === 'Escape' && !busy) { event.preventDefault(); onCancel() } }}>
-    <p className='avatar-crop-intro'>移动、缩放照片，选好头像的位置。</p>
-    <div ref={frame} className='avatar-crop-frame' role='group' aria-label='正方形头像裁剪区域' aria-describedby={hint} tabIndex={0}
+    <p className='avatar-crop-intro'>移动、缩放照片，选好{subject}的位置。</p>
+    <div ref={frame} className='avatar-crop-frame' role='group' aria-label={`正方形${subject}裁剪区域`} aria-describedby={hint} tabIndex={0}
       onPointerDown={event => {
         if (!size || busy || drag.current || event.button !== 0) return
         event.preventDefault()

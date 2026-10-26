@@ -8,7 +8,7 @@ import { imagePresets as bundledPresets } from '@preset-assets'
 import { createPresetCatalog } from './image-preset-client'
 import { prepareItemInput } from './item-input'
 import { prepareUploadImage } from './local-image'
-import { AVATAR_IMAGE_OPTIONS, AVATAR_PROCESSING_VERSION, IMAGE_MAX_BYTES, IMAGE_MAX_EDGE, imageMime, isAvatarPurpose } from './image-processing'
+import { IMAGE_MAX_BYTES, IMAGE_MAX_EDGE, imageMime, squareImageProcessing } from './image-processing'
 import { OfflineStorage } from './offline-storage'
 import { collectPages, OfflineSnapshot, SyncManifest } from './offline-sync'
 
@@ -196,18 +196,18 @@ export async function uploadImage(path: string, space: string, purpose: string, 
   const storageKey = `${remoteKey}:uploads:${readSession()!.user.id}`
   const entries: UploadCache[] = memory || (purpose === 'import_source' ? [] : Taro.getStorageSync(storageKey) || [])
   const persist = () => { if (!memory && purpose !== 'import_source') Taro.setStorageSync(storageKey, entries.slice(0, 50)) }
-  const avatar = isAvatarPurpose(purpose)
-  let cached = entries.find(entry => entry.path === path && entry.space === space && entry.purpose === purpose && (!avatar || entry.processing === AVATAR_PROCESSING_VERSION))
+  const square = squareImageProcessing(purpose)
+  let cached = entries.find(entry => entry.path === path && entry.space === space && entry.purpose === purpose && (!square || entry.processing === square.version))
   if (cached?.ready) return cached.id
-  const prepared = cached?.uploaded ? null : await prepareUploadImage(path, purpose === 'import_source', avatar ? AVATAR_IMAGE_OPTIONS : undefined)
+  const prepared = cached?.uploaded ? null : await prepareUploadImage(path, purpose === 'import_source', square?.options)
   if (prepared && (prepared.bytes.byteLength > IMAGE_MAX_BYTES || prepared.width > IMAGE_MAX_EDGE || prepared.height > IMAGE_MAX_EDGE || imageMime(prepared.bytes) !== prepared.mime)) throw new Error('图片处理失败，请重新选择图片')
-  if (prepared && avatar && (prepared.width !== prepared.height || prepared.width > AVATAR_IMAGE_OPTIONS.maxEdge! || prepared.bytes.byteLength > AVATAR_IMAGE_OPTIONS.maxBytes!)) throw new Error('头像处理失败，请重新裁剪图片')
+  if (prepared && square && (prepared.width !== prepared.height || prepared.width > square.options.maxEdge! || prepared.bytes.byteLength > square.options.maxBytes!)) throw new Error('图片处理失败，请重新裁剪图片')
   // A fresh intent must match these exact encoded bytes, including on retry.
   if (!cached?.uploaded) {
     const { bytes: buffer, mime } = prepared!
     const response = await api.request<{ id: string; url: string; headers: Record<string, string>; expires_at: string }>('/files/uploads', 'POST', { space_id: space, purpose, name: purpose.endsWith('_avatar') ? '头像' : purpose === 'import_source' ? '订单截图' : purpose === 'receipt' ? '凭证' : '物品主图', mime_type: mime, size_bytes: buffer.byteLength })
     if (cached) entries.splice(entries.indexOf(cached), 1)
-    cached = { ...response, space, path, purpose, ...(avatar ? { processing: AVATAR_PROCESSING_VERSION } : {}), ready: false, uploaded: false }
+    cached = { ...response, space, path, purpose, ...(square ? { processing: square.version } : {}), ready: false, uploaded: false }
     entries.unshift(cached)
     persist()
   }

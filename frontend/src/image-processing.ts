@@ -10,9 +10,12 @@ export type ImageProcessingOptions = { maxEdge?: number; maxBytes?: number; minE
 export const AVATAR_IMAGE_OPTIONS: ImageProcessingOptions = { maxEdge: 512, maxBytes: 256 * 1024, minEdge: 128, requireSquare: true }
 export const AVATAR_PROCESSING_VERSION = 'avatar-square-v1'
 export const isAvatarPurpose = (purpose: string) => purpose === 'personal_avatar' || purpose === 'family_avatar'
+export const squareImageProcessing = (purpose: string) => isAvatarPurpose(purpose)
+  ? { options: AVATAR_IMAGE_OPTIONS, version: AVATAR_PROCESSING_VERSION }
+  : purpose === 'item_image' ? { options: AVATAR_IMAGE_OPTIONS, version: 'item-square-v1' } : undefined
 
 export function assertSquareImage(size: ImageSize) {
-  if (!Number.isInteger(size.width) || !Number.isInteger(size.height) || size.width < 1 || size.width !== size.height) throw new Error('请先将头像裁剪为正方形')
+  if (!Number.isInteger(size.width) || !Number.isInteger(size.height) || size.width < 1 || size.width !== size.height) throw new Error('请先将图片裁剪为正方形')
 }
 
 export function imageMime(bytes: ArrayBuffer): ImageMime {
@@ -57,7 +60,7 @@ export async function processImage(size: ImageSize, encode: ImageEncoder, option
     if (Math.max(next.width, next.height) < (options.minEdge ?? 512) || next.width === dimensions.width && next.height === dimensions.height) break
     dimensions = next
   }
-  throw new Error(options.requireSquare ? '头像压缩后仍然过大，请换一张图片重试' : '图片压缩后仍超过 2 MiB，请裁剪图片或分段截图后重试')
+  throw new Error(options.requireSquare ? '图片压缩后仍然过大，请换一张图片重试' : '图片压缩后仍超过 2 MiB，请裁剪图片或分段截图后重试')
 }
 
 export function createImageQueue() {

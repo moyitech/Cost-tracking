@@ -156,16 +156,16 @@ export function releaseNativeAvatarSource(source: NativeAvatarSource) {
 }
 
 /** Mock saves the same bounded, cropped bytes as the API path, never a temporary original. */
-export async function persistAvatarPreview(path: string): Promise<string> {
+export async function persistSquarePreview(path: string, kind: 'avatar' | 'item' = 'avatar'): Promise<string> {
   const image = await prepareUploadImage(path, false, AVATAR_IMAGE_OPTIONS)
   if (process.env.TARO_ENV !== 'weapp') return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(String(reader.result))
-    reader.onerror = () => reject(new Error('头像保存失败，请重试'))
+    reader.onerror = () => reject(new Error('图片保存失败，请重试'))
     reader.readAsDataURL(new Blob([image.bytes], { type: image.mime }))
   })
   const extension = image.mime === 'image/webp' ? 'webp' : 'jpg'
-  const filePath = `${Taro.env.USER_DATA_PATH}/avatar-${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`
+  const filePath = `${Taro.env.USER_DATA_PATH}/${kind}-${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`
   await new Promise<void>((resolve, reject) => Taro.getFileSystemManager().writeFile({ filePath, data: image.bytes, success: () => resolve(), fail: reject }))
   return filePath
 }

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { AVATAR_IMAGE_OPTIONS, createImageQueue, IMAGE_MAX_BYTES, imageDimensions, imageMime, isAvatarPurpose, isLongScreenshot, processImage } from '../src/image-processing'
+import { AVATAR_IMAGE_OPTIONS, createImageQueue, IMAGE_MAX_BYTES, imageDimensions, imageMime, isAvatarPurpose, isLongScreenshot, processImage, squareImageProcessing } from '../src/image-processing'
 
 function file(mime: 'webp' | 'jpeg' | 'png', size = 100) {
   const bytes = new Uint8Array(size)
@@ -120,8 +120,25 @@ test('avatar fallback uses real JPEG bytes and may shrink below 512 to meet its 
 
 test('failed avatar compression stays bounded and leaves other image limits unchanged', async () => {
   const edges: number[] = []
-  await assert.rejects(() => processImage({ width: 512, height: 512 }, async size => { edges.push(size.width); return file('webp', 256 * 1024 + 1) }, AVATAR_IMAGE_OPTIONS), /头像压缩/)
+  await assert.rejects(() => processImage({ width: 512, height: 512 }, async size => { edges.push(size.width); return file('webp', 256 * 1024 + 1) }, AVATAR_IMAGE_OPTIONS), /图片压缩/)
   assert.ok(Math.min(...edges) >= 128)
   const ordinary = await processImage({ width: 1000, height: 800 }, async () => file('webp', IMAGE_MAX_BYTES))
   assert.deepEqual([ordinary.width, ordinary.height, ordinary.bytes.byteLength], [1000, 800, IMAGE_MAX_BYTES])
+})
+
+test('item uploads enforce square crops and avatar compression limits without affecting receipts or screenshots', async () => {
+  const policy = squareImageProcessing('item_image')!
+  assert.equal(policy.version, 'item-square-v1')
+  assert.notEqual(policy.version, squareImageProcessing('personal_avatar')!.version)
+  for (const edge of [4000, 128]) {
+    const image = await processImage({ width: edge, height: edge }, async (size, mime) => {
+      assert.equal(size.width, Math.min(edge, 512))
+      return mime === 'image/webp' ? file('png') : file('jpeg', 256 * 1024)
+    }, policy.options)
+    assert.equal(image.width, image.height)
+    assert.equal(image.mime, 'image/jpeg')
+    assert.ok(image.bytes.byteLength <= 256 * 1024)
+  }
+  await assert.rejects(() => processImage({ width: 900, height: 300 }, async () => { throw new Error('uncropped originals must never reach the encoder') }, policy.options), /正方形/)
+  for (const purpose of ['receipt', 'import_source']) assert.equal(squareImageProcessing(purpose), undefined)
 })
