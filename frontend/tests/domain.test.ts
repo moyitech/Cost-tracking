@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { ItemInput, Ledger, migrateLedger, metrics, newItem, parseMoney, spaceDaily, validateDisposal, validateExpense, validateInput } from '../src/domain'
+import { completionHint, dailyRanking, isIncompleteHolding, ItemInput, Ledger, migrateLedger, metrics, missingFields, moneyShort, newItem, parseMoney, spaceDaily, validateDisposal, validateExpense, validateInput } from '../src/domain'
 import { applyCommand } from '../src/commands'
 
 const input: ItemInput = { name: '电脑', purchaseAmount: 800000, purchaseDate: '2025-06-07', image: '', note: '' }
@@ -158,4 +158,46 @@ test('AC25: legacy idle snapshots migrate once without changing costs, dates, hi
   assert.equal(migrateLedger(migrated), migrated)
   const restored = applyCommand(migrated, { type: 'restore', id: 'deleted', revision: 2 })
   assert.equal(restored.items[1].status, 'active')
+})
+
+test('secondary amounts drop only a zero fraction', () => {
+  assert.equal(moneyShort(810500), '8,105')
+  assert.equal(moneyShort(10550), '105.50')
+  assert.equal(moneyShort(-120000), '-1,200')
+  assert.equal(moneyShort(0), '0')
+  assert.equal(moneyShort(null), '待补充')
+})
+test('missing fields name what to complete; disposed items also need disposal facts', () => {
+  assert.deepEqual(missingFields(item()), [])
+  const unknown = { ...item(), purchaseAmount: null, purchaseDate: null }
+  assert.deepEqual(missingFields(unknown), ['价格', '购买日期'])
+  assert.equal(completionHint(missingFields(unknown)), '补充价格和购买日期')
+  const sold = { ...unknown, status: 'sold' as const, disposalDate: null, recoveryAmount: null }
+  assert.deepEqual(missingFields(sold), ['价格', '购买日期', '处置日期', '回收金额'])
+  assert.equal(completionHint(missingFields(sold)), '补充价格、购买日期等')
+  assert.equal(completionHint([]), '')
+})
+test('AC24: the incomplete set matches the home metric count', () => {
+  const now = '2026-10-19'
+  const complete = item()
+  const noPrice = { ...item(), id: 'no-price', purchaseAmount: null }
+  const noDate = { ...item(), id: 'no-date', purchaseDate: null }
+  const soldUnknown = { ...item(), id: 'sold', purchaseAmount: null, status: 'sold' as const, disposalDate: now, recoveryAmount: 0 }
+  const deletedUnknown = { ...item(), id: 'deleted', purchaseAmount: null, deleted: true }
+  const items = [complete, noPrice, noDate, soldUnknown, deletedUnknown]
+  assert.deepEqual(items.filter(i => isIncompleteHolding(i, now)).map(i => i.id), ['no-price', 'no-date'])
+  assert.equal(spaceDaily(items, now).incomplete, 2)
+  // All held items unknown: the home shows "待补充"; an empty set shows 0.00.
+  assert.deepEqual(spaceDaily([noPrice, noDate], now), { amount: 0, incomplete: 2, count: 2 })
+})
+test('daily ranking covers held items with a known daily cost, highest first', () => {
+  const now = '2026-10-19'
+  const computer = item()
+  const phone = newItem({ name: '手机', purchaseAmount: 600000, purchaseDate: '2026-10-10', image: '', note: '' }, 'personal', 'phone')
+  const unknown = { ...item(), id: 'unknown', name: '未知', purchaseAmount: null }
+  const sold = { ...newItem({ name: '相机', purchaseAmount: 900000, purchaseDate: '2026-10-18', image: '', note: '' }, 'personal', 'camera'), status: 'sold' as const, disposalDate: now, recoveryAmount: 0 }
+  const ranking = dailyRanking([computer, phone, unknown, sold], 5, now)
+  assert.deepEqual(ranking.map(r => r.item.id), ['phone', 'computer'])
+  assert.equal(ranking[0].daily, 60000)
+  assert.equal(dailyRanking([computer, phone], 1, now).length, 1)
 })

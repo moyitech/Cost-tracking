@@ -66,7 +66,7 @@ export default function InvitationPage() {
               if (result.resultSpaceId) setSpaceId(result.resultSpaceId)
               await Taro.reLaunch({ url: '/pages/index/index?tab=spaces' })
             } catch (e) { await inspect(); throw e }
-          }) }}>{preview.already_member ? '进入家庭' : '确认加入家庭'}</Action>
+          }, preview.already_member ? '已进入家庭' : '已加入家庭') }}>{preview.already_member ? '进入家庭' : '确认加入家庭'}</Action>
         </View> : <View className='invite-unavailable'><Text>{invitationMessages[expired ? 'expired' : preview.status]}</Text><Text>请联系家人重新分享邀请。</Text></View>}
         <Text className='invite-expiry'>{formatInvitationExpiry(preview.expires_at, now)}</Text>
       </> : <>{!!loadError && <Action className='secondary submit-button' loading={loading} onClick={() => void inspect()}>重新加载</Action>}</>}

@@ -1,6 +1,8 @@
 import type { ServerMetrics } from './api-types'
 import { validateItemImage } from './item-image'
 export type Status = 'active' | 'sold' | 'retired'
+// Home list filters: a status, all disposed items, held items missing facts, or unknown prices.
+export type ItemFilter = 'all' | 'history' | 'incomplete' | 'unpriced' | Status
 export type Role = 'admin' | 'editor' | 'viewer'
 export type Space = { id: string; name: string; kind: 'personal' | 'family'; role: Role; avatar?: string; avatarFileId?: string; memberCount?: number; itemCount?: number; members: { id: string; name: string; role: Role; userId?: string; revision?: number; avatarFileId?: string }[] }
 export type Profile = { id: string; displayName: string; avatar?: string; avatarFileId?: string }
@@ -59,6 +61,8 @@ export function parseMoney(value: string, required = false): number | null {
 }
 export const moneyInput = (cents: number | null) => cents === null ? '' : (cents / 100).toFixed(2)
 export const money = (cents: number | null, digits = 2) => cents === null ? '待补充' : (cents / 100).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })
+// Secondary inline totals drop a zero fraction; exact cents stay visible otherwise.
+export const moneyShort = (cents: number | null) => cents !== null && Math.round(cents) % 100 === 0 ? money(cents, 0) : money(cents)
 export function metrics(item: Item, now = today()) {
   if (item.serverMetrics && (isDisposed(item) || item.serverMetrics.as_of_date === now)) {
     const m = item.serverMetrics
@@ -74,12 +78,33 @@ export function metrics(item: Item, now = today()) {
   const net = isDisposed(item) ? total !== null && item.recoveryAmount !== null ? total - item.recoveryAmount : null : total
   return { extra, known, total, days: validDays, net, daily: validDays && net !== null ? net / validDays : null }
 }
+const localDaily = (item: Item, now: string) => metrics({ ...item, serverMetrics: undefined }, now).daily
+export const isHolding = (item: Item) => !item.deleted && !isDisposed(item)
+// The home metric's "待补充" set: held items whose own daily value cannot be computed.
+export const isIncompleteHolding = (item: Item, now = today()) => isHolding(item) && localDaily(item, now) === null
 export function spaceDaily(items: Item[], now = today()) {
-  const holding = items.filter(i => !i.deleted && !isDisposed(i))
   // Aggregate raw daily values before rounding the displayed total.
-  const values = holding.map(i => metrics({ ...i, serverMetrics: undefined }, now).daily)
-  return { amount: values.reduce<number>((sum, value) => sum + (value ?? 0), 0), incomplete: values.filter(v => v === null).length, count: holding.length }
+  const values = items.filter(isHolding).map(i => localDaily(i, now))
+  return { amount: values.reduce<number>((sum, value) => sum + (value ?? 0), 0), incomplete: values.filter(v => v === null).length, count: values.length }
 }
+export function dailyRanking(items: Item[], limit = 5, now = today()) {
+  return items.filter(isHolding)
+    .map(item => ({ item, daily: metrics(item, now).daily }))
+    .filter((row): row is { item: Item; daily: number } => row.daily !== null)
+    .sort((a, b) => b.daily - a.daily || a.item.name.localeCompare(b.item.name))
+    .slice(0, limit)
+}
+export function missingFields(item: Pick<Item, 'status' | 'purchaseAmount' | 'purchaseDate' | 'disposalDate' | 'recoveryAmount'>) {
+  const fields: string[] = []
+  if (item.purchaseAmount === null) fields.push('价格')
+  if (!item.purchaseDate) fields.push('购买日期')
+  if (isDisposed(item)) {
+    if (!item.disposalDate) fields.push('处置日期')
+    if (item.recoveryAmount === null) fields.push('回收金额')
+  }
+  return fields
+}
+export const completionHint = (fields: string[]) => !fields.length ? '' : fields.length <= 2 ? `补充${fields.join('和')}` : `补充${fields.slice(0, 2).join('、')}等`
 export function validateInput(input: ItemInput, now = today()) {
   if (!input.name.trim()) throw new Error('请填写物品名称')
   validateItemImage(input)

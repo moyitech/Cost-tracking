@@ -60,7 +60,6 @@ export function InvitationPanel({ space, onLayoutChange }: { space: Space; onLay
   }
   return <View className='invitation-panel'>
     {!invite ? <>
-      <Text className='form-intro'>邀请家人，一起记录物品的日常。</Text>
       <View className='invitation-roles'>{(['editor', 'viewer'] as const).map(value => <Action key={value} className={`invitation-role ${role === value ? 'selected' : ''}`} disabled={busy} onClick={() => { setRole(value); key.current = uid() }}>
         <View><Text className='invitation-role-title'>{roleLabels[value]}</Text><Text className='invitation-role-description'>{value === 'editor' ? '可添加、编辑家庭物品' : '仅查看家庭物品'}</Text></View><Text className='invitation-role-check'>{role === value ? '✓' : '○'}</Text>
       </Action>)}</View>

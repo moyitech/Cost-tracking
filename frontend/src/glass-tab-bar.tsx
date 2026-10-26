@@ -209,7 +209,7 @@ export function GlassTabBar({ value, onChange }: { value: Tab; onChange: (tab: T
         <View className='tab-bar-lens-rest' style={native ? { opacity: 1 - visual.strength } : undefined} />
         <View className='tab-bar-lens-surface' style={native ? { opacity: visual.strength } : undefined} />
       </View>
-      {tabs.map((tab, index) => <Action key={tab.id} label={`${tab.label}${value === tab.id ? '，当前页面' : ''}`} className={`tab-item tab-item-${index}`} onClick={() => {
+      {tabs.map((tab, index) => <Action key={tab.id} label={`${tab.label}${value === tab.id ? '，当前页面' : ''}`} className={`tab-item tab-item-${index}`} pressable={false} onClick={() => {
         if (native && Date.now() < suppressClickUntil.current) return
         setTarget({ position: index, pressed: false })
         onChange(tab.id)

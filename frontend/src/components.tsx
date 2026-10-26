@@ -5,7 +5,7 @@ import Popup from '@nutui/nutui-react-taro/dist/es/packages/popup'
 import '@nutui/nutui-react-taro/dist/es/packages/popup/style/css'
 import { AssetName, assets } from './assets'
 import { useAdaptiveLayout } from './layout'
-import { today } from './domain'
+import { money, moneyShort, today } from './domain'
 import { fileUrl, imagePresetUrl, mockEnabled, readMediaEpoch, subscribeMedia } from './services'
 import { stablePixels } from './sheet-scroll'
 import { useSheetScroll } from './use-sheet-scroll'
@@ -33,15 +33,26 @@ const symbolPaths = {
   camera: '<path d="M8 6l2-3h4l2 3h4v14H4V6z"/><circle cx="12" cy="13" r="4"/>',
   refresh: '<path stroke-width="1.7" d="M19.5 9A7.9 7.9 0 0 0 6.2 6.1L3.8 8.5M3.8 4.5v4h4M4.5 15a7.9 7.9 0 0 0 13.3 2.9l2.4-2.4M20.2 19.5v-4h-4"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/>',
+  // Vertical: a horizontal ··· beside the WeChat capsule reads as its menu.
+  more: '<circle cx="12" cy="5" r="1.7" fill="#1e3530"/><circle cx="12" cy="12" r="1.7" fill="#1e3530"/><circle cx="12" cy="19" r="1.7" fill="#1e3530"/>',
 }
 export function SymbolIcon({ name }: { name: keyof typeof symbolPaths }) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1e3530" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${symbolPaths[name]}</svg>`
   return <Image className='symbol-icon' src={`data:image/svg+xml,${encodeURIComponent(svg)}`} mode='aspectFit' />
 }
-export function Action({ children, onClick, className = '', disabled = false, label, loading = false, expanded }: PropsWithChildren<{ onClick?: () => void; className?: string; disabled?: boolean; label?: string; loading?: boolean; expanded?: boolean }>) {
+export function Action({ children, onClick, className = '', disabled = false, label, loading = false, expanded, pressable = true }: PropsWithChildren<{ onClick?: () => void; className?: string; disabled?: boolean; label?: string; loading?: boolean; expanded?: boolean; pressable?: boolean }>) {
   // H5 Button's internal loading renderer competes with React's changing children.
   // Keep loading feedback owned by React to avoid insertBefore failures on retries.
-  return <Button className={`action ${className} ${disabled || loading ? 'is-disabled' : ''}`} onClick={onClick} disabled={disabled || loading ? true : undefined} ariaLabel={label} aria-expanded={expanded}>{loading && <View className='action-spinner' />}{children}</Button>
+  // `.action` resets the platform button-hover look, so press feedback uses its own class.
+  return <Button className={`action ${className} ${pressable ? '' : 'no-press'} ${disabled || loading ? 'is-disabled' : ''}`} hoverClass={pressable ? 'is-pressed' : 'none'} hoverStayTime={70} onClick={onClick} disabled={disabled || loading ? true : undefined} ariaLabel={label} aria-expanded={expanded}>{loading && <View className='action-spinner' />}{children}</Button>
+}
+// Currency sign and fraction stay quieter than the integer part.
+export function Amount({ cents, unit, short = false, className = '', empty = '待补充' }: { cents: number | null; unit?: string; short?: boolean; className?: string; empty?: string }) {
+  if (cents === null) return <View className={`amount amount-empty ${className}`}><Text>{empty}</Text></View>
+  const text = short ? moneyShort(Math.abs(cents)) : money(Math.abs(cents))
+  const [integer, fraction] = text.split('.')
+  const sign = cents < 0 ? '-' : ''
+  return <View className={`amount ${className}`} ariaLabel={`${sign}${text}元${unit === '/天' ? '每天' : ''}`}><Text className='amount-currency'>{sign}¥</Text><Text className='amount-integer'>{integer}</Text>{fraction && <Text className='amount-fraction'>.{fraction}</Text>}{unit && <Text className='amount-unit'>{unit}</Text>}</View>
 }
 export function Header({ title, back = false, detail = false, onBack, onProfile, actions, hideProfile = false, profile, profileLabel }: { title?: string; back?: boolean; detail?: boolean; onBack?: () => void; onProfile?: () => void; actions?: ReactNode; hideProfile?: boolean; profile?: ReactNode; profileLabel?: string }) {
   const native = process.env.TARO_ENV === 'weapp'
@@ -49,7 +60,7 @@ export function Header({ title, back = false, detail = false, onBack, onProfile,
   return <><View className={`header ${detail ? 'detail-header' : ''}`} style={{ paddingTop: native ? `${layout.statusTop}px` : 'env(safe-area-inset-top, 0px)' }}>
     <View className='header-inner' style={native ? { height: `${layout.navHeight}px`, paddingRight: `${layout.capsuleRight}px` } : undefined}><View className='row header-leading'>
       {back && <Action className='back-button' label='返回' onClick={onBack || goBack}><Icon name={detail ? 'detail-container16' : 'import-container21'} /></Action>}
-      {title ? <Text className='header-title'>{title}</Text> : <View className='brand' ariaLabel='用本'><Text>用</Text><View className='brand-last'><Text>本</Text></View></View>}
+      {title ? <Text className='header-title'>{title}</Text> : !detail && <View className='brand' ariaLabel='用本'><Text>用</Text><View className='brand-last'><Text>本</Text></View></View>}
     </View>
     {actions && <View className='header-actions'>{actions}</View>}
     {!detail && <View className={`row header-controls ${native ? 'native-controls' : ''}`}>
@@ -182,13 +193,16 @@ export function SelectField({ label, value, options, onChange, disabled = false 
     ? <select className='web-picker' aria-label={label} value={Math.max(0, options.indexOf(value))} disabled={disabled || !options.length} onChange={e => { const i = Number(e.target.value); onChange(options[i], i) }}>{options.map((option, i) => <option value={i} key={i}>{option}</option>)}</select>
     : <Picker mode='selector' range={options} value={Math.max(0, options.indexOf(value))} disabled={disabled || !options.length} onChange={e => { const i = Number(e.detail.value); onChange(options[i], i) }}><View className='picker-value'>{value} <Text className='muted'>⌄</Text></View></Picker>}</View>
 }
+// Confirm buttons for destructive actions share the danger text color.
+export const destructiveColor = '#c04b42'
 export function ErrorNote({ message }: { message: string }) { return message ? <View className='error-note' role='alert'>{message}</View> : null }
+// Success copy names the result, at most 7 characters for WeChat's success toast.
 export function useSubmit(onSuccess: () => void) {
   const [error, setError] = useState(''); const [busy, setBusy] = useState(false); const lock = useRef(false)
-  const submit = async (task: () => Promise<unknown>) => {
+  const submit = async (task: () => Promise<unknown>, message = '已保存') => {
     if (lock.current) return
     lock.current = true; setBusy(true); setError('')
-    try { await task(); void Taro.showToast({ title: '已保存', icon: 'success' }); onSuccess() }
+    try { await task(); void Taro.showToast({ title: message, icon: 'success' }); onSuccess() }
     catch (e) { setError(e instanceof Error ? e.message : '保存失败，输入已保留，请重试') }
     finally { lock.current = false; setBusy(false) }
   }
@@ -208,4 +222,3 @@ export async function choosePictures(count = 1, persist = true, sourceType: ('al
     return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(blob) })
   }))
 }
-export function FooterNote({ children }: { children: ReactNode }) { return <View className='footer-note'>{children}</View> }

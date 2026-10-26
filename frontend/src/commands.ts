@@ -116,7 +116,7 @@ export function applyCommand(current: Ledger, command: Command): Ledger {
   const item = data.items.find(i => i.id === command.id)
   if (!item) throw new Error('找不到这件物品')
   const source = writable(item.spaceId)
-  if (item.revision !== command.revision) throw new Error('档案已被其他操作更新，请重新打开后核对；本次输入已保留')
+  if (item.revision !== command.revision) throw new Error('档案已被其他操作更新；输入已保留，请核对后再保存')
   if (item.deleted && command.type !== 'restore') throw new Error('档案已移入回收站，请先恢复')
   switch (command.type) {
     case 'edit': {

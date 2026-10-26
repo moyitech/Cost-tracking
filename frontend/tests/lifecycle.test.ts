@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { Item, newItem } from '../src/domain'
-import { compareLifecycleEvents, lifecycleEvents } from '../src/lifecycle'
+import { compareLifecycleEvents, dayLabel, groupByMonth, lifecycleEvents } from '../src/lifecycle'
 const item = (): Item => ({
   ...newItem({ name: '平板', image: '', note: '', purchaseAmount: 229900, purchaseDate: '2024-04-12' }, 'personal', 'tablet'),
   expenses: [{ id: 'case', category: '配件', amount: 9900, date: '2024-04-13', note: '保护壳' }],
@@ -40,4 +40,27 @@ test('unknown values stay unknown and cross-item records sort by occurrence', ()
   assert.equal(events[1].amount, '购买金额待补充')
   const other = item(); other.id = 'other'; other.purchaseDate = '2025-01-01'
   assert.equal([...events, ...lifecycleEvents(other)].sort(compareLifecycleEvents)[0].id, 'other:purchase')
+})
+test('events carry structured amounts, expense identity and missing facts', () => {
+  const source = item()
+  const [expense, purchase] = lifecycleEvents(source)
+  assert.equal(expense.cents, 9900); assert.equal(expense.expenseId, 'case'); assert.ok(!expense.missing)
+  assert.equal(purchase.cents, 229900); assert.equal(purchase.missing, false)
+  source.purchaseAmount = null
+  const unknown = lifecycleEvents(source).find(e => e.kind === 'purchase')!
+  assert.equal(unknown.cents, null); assert.equal(unknown.missing, true); assert.equal(unknown.amount, '购买金额待补充')
+  source.status = 'retired'; source.disposalDate = null; source.recoveryAmount = null
+  const disposal = lifecycleEvents(source).find(e => e.kind === 'retired')!
+  assert.equal(disposal.missing, true); assert.equal(disposal.cents, null)
+})
+test('records group by month, newest first, with undated records last', () => {
+  const rows = [
+    { event: { occurredOn: '2026-10-23' }, id: 'a' }, { event: { occurredOn: null }, id: 'b' },
+    { event: { occurredOn: '2025-06-07' }, id: 'c' }, { event: { occurredOn: '2026-10-01' }, id: 'd' },
+  ]
+  const groups = groupByMonth(rows)
+  assert.deepEqual(groups.map(g => [g.label, g.rows.map(r => r.id)]), [['2026年10月', ['a', 'd']], ['2025年6月', ['c']], ['日期待补充', ['b']]])
+  assert.deepEqual(groupByMonth([]), [])
+  assert.equal(dayLabel('2026-01-05'), '1月5日')
+  assert.equal(dayLabel(null), '日期待补充')
 })

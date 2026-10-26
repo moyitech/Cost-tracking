@@ -39,7 +39,7 @@ export function createApiClient(transport: Transport, read: () => Session | null
 }
 export function failure(result: { status: number; data: any }) {
   const error = result.data?.error
-  const message = result.status === 409 && ['REVISION_CONFLICT', 'IDEMPOTENCY_CONFLICT'].includes(error?.code) ? `${error?.message || '档案已更新'}；请重新打开档案后核对，输入已保留`
+  const message = result.status === 409 && ['REVISION_CONFLICT', 'IDEMPOTENCY_CONFLICT'].includes(error?.code) ? `${error?.message || '档案已被其他操作更新'}；输入已保留，请核对后再保存`
     : result.status === 403 ? `${error?.message || '权限已变化，无法操作'}；输入已保留`
       : error?.message || '服务暂时不可用，输入已保留，请重试'
   return new ApiError(result.status, error?.code || 'REQUEST_FAILED', message)
