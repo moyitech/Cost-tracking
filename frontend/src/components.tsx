@@ -6,7 +6,7 @@ import '@nutui/nutui-react-taro/dist/es/packages/popup/style/css'
 import { AssetName, assets } from './assets'
 import { useAdaptiveLayout } from './layout'
 import { money, moneyShort, today } from './domain'
-import { fileUrl, imagePresetUrl, mockEnabled, readMediaEpoch, subscribeMedia } from './services'
+import { useImagePreview } from './use-image-preview'
 import { stablePixels } from './sheet-scroll'
 import { useSheetScroll } from './use-sheet-scroll'
 import { traceKeyboard } from './keyboard-trace'
@@ -36,8 +36,8 @@ const symbolPaths = {
   // Vertical: a horizontal ··· beside the WeChat capsule reads as its menu.
   more: '<circle cx="12" cy="5" r="1.7" fill="#1e3530"/><circle cx="12" cy="12" r="1.7" fill="#1e3530"/><circle cx="12" cy="19" r="1.7" fill="#1e3530"/>',
 }
-export function SymbolIcon({ name }: { name: keyof typeof symbolPaths }) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1e3530" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${symbolPaths[name]}</svg>`
+export function SymbolIcon({ name, color = '#1e3530' }: { name: keyof typeof symbolPaths; color?: string }) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${symbolPaths[name]}</svg>`
   return <Image className='symbol-icon' src={`data:image/svg+xml,${encodeURIComponent(svg)}`} mode='aspectFit' />
 }
 export function Action({ children, onClick, className = '', disabled = false, label, loading = false, expanded, pressable = true }: PropsWithChildren<{ onClick?: () => void; className?: string; disabled?: boolean; label?: string; loading?: boolean; expanded?: boolean; pressable?: boolean }>) {
@@ -73,29 +73,15 @@ export function goBack() { if (Taro.getCurrentPages().length > 1) void Taro.navi
 export function Pill({ children, tone = '', dot = false }: PropsWithChildren<{ tone?: string; dot?: boolean }>) { return <View className={`pill ${tone}`}>{dot && <View className='dot' />}{children}</View> }
 export function Empty({ title = '还没有物品', text = '从一件珍惜的物品开始，记录它与你的时间。', children }: PropsWithChildren<{ title?: string; text?: string }>) { return <View className='empty'><Text className='empty-symbol'>◇</Text><Text className='empty-title'>{title}</Text>{text && <Text className='muted'>{text}</Text>}{children}</View> }
 export function Photo({ src, fileId, presetId, className = '' }: { src: string; fileId?: string; presetId?: string; className?: string }) {
-  const [mediaEpoch, setMediaEpoch] = useState(readMediaEpoch)
-  useEffect(() => subscribeMedia(() => setMediaEpoch(readMediaEpoch())), [])
-  const [url, setUrl] = useState(src); const retried = useRef(false)
-  const resource = `${presetId || ''}:${fileId || ''}:${src}`; const current = useRef(resource); current.current = resource
-  useEffect(() => { let active = true; setUrl(presetId ? '' : src); retried.current = false
-    const request = presetId ? imagePresetUrl(presetId) : !mockEnabled && fileId ? fileUrl(fileId) : undefined
-    if (request) void request.then(value => { if (active) setUrl(value) }).catch(() => {})
-    return () => { active = false }
-  }, [src, fileId, presetId, mediaEpoch])
-  const recover = () => {
-    if (mockEnabled || retried.current || (!presetId && !fileId)) return
-    retried.current = true
-    const request = presetId ? imagePresetUrl(presetId, true) : fileUrl(fileId!, true)
-    void request.then(value => { if (current.current === resource) setUrl(value) }).catch(() => { if (current.current === resource) setUrl('') })
-  }
-  return url ? <Image className={`photo ${presetId ? 'photo-preset ' : ''}${className}`} src={url} mode={presetId ? 'aspectFit' : 'aspectFill'} ariaLabel={presetId ? '物品预设图片' : undefined} onError={recover} /> : <View className={`photo photo-empty ${className}`}><Text>物</Text></View>
+  const { url, imageKey, recover } = useImagePreview({ src, fileId, presetId })
+  return url ? <Image key={imageKey} className={`photo ${presetId ? 'photo-preset ' : ''}${className}`} src={url} mode={presetId ? 'aspectFit' : 'aspectFill'} ariaLabel={presetId ? '物品预设图片' : undefined} onError={recover} /> : <View className={`photo photo-empty ${className}`}><Text>物</Text></View>
 }
 const SheetFocusContext = createContext<{
   owner: string
   focus: (field: string) => void
   blur: (field: string) => void
 } | null>(null)
-export function Sheet({ title, heading, onClose, children, footer, closeLabel = '关闭', className = '', nested = false }: PropsWithChildren<{ title: string; heading?: ReactNode; onClose: () => void; footer?: ReactNode; closeLabel?: string; className?: string; nested?: boolean }>) {
+export function Sheet({ title, heading, renderHeader, onClose, children, footer, closeLabel = '关闭', className = '', nested = false }: PropsWithChildren<{ title: string; heading?: ReactNode; renderHeader?: (close: () => void) => ReactNode; onClose: () => void; footer?: ReactNode; closeLabel?: string; className?: string; nested?: boolean }>) {
   const layout = useAdaptiveLayout()
   const native = process.env.TARO_ENV === 'weapp'
   const id = `sheet-${useId().replace(/:/g, '')}`
@@ -133,7 +119,7 @@ export function Sheet({ title, heading, onClose, children, footer, closeLabel = 
       })
     })
     return () => { active = false }
-  }, [native, id, children, heading, footer, layout.sheetHeight, layout.safeBottom, layout.compactHeight])
+  }, [native, id, children, heading, renderHeader, footer, layout.sheetHeight, layout.safeBottom, layout.compactHeight])
   const close = () => { hideKeyboard('close'); onClose() }
   const content = <View id={native ? undefined : `${id}-scroll`} className='sheet-content' onTouchMove={native ? undefined : cancelReveal}>{children}</View>
   // Catch wheel intent too, without relying on H5-only event props in WXML.
@@ -146,10 +132,10 @@ export function Sheet({ title, heading, onClose, children, footer, closeLabel = 
   const popup = <Popup visible position='bottom' round minHeight='0' style={{ bottom: `${layout.sheetBottom}px` }} onClose={close} closeOnOverlayClick={false} lockScroll zIndex={nested ? 1300 : undefined} portal={nested && process.env.TARO_ENV === 'h5' ? () => document.body : undefined}>
     <SheetFocusContext.Provider value={focusHandlers}>
       <View id={id} className={`sheet ${className} ${layout.compactHeight ? 'sheet-compact' : ''}`} style={layout.style} onTouchMove={event => event.stopPropagation()}>
-        <View className='sheet-heading' catchMove={native}>{heading || <Text className='sheet-title'>{title}</Text>}<View className='sheet-heading-actions'>
+        <View className='sheet-heading' catchMove={native}>{renderHeader ? renderHeader(close) : <>{heading || <Text className='sheet-title'>{title}</Text>}<View className='sheet-heading-actions'>
           {layout.keyboardOpen && <Action className='sheet-keyboard-dismiss' onClick={() => hideKeyboard('dismiss')}>收起键盘</Action>}
           <Action className='sheet-close' label={closeLabel} onClick={close}>×</Action>
-        </View></View>
+        </View></>}</View>
         {native ? <ScrollView className='sheet-scroll' scrollY style={contentHeight === undefined ? undefined : { height: `${contentHeight}px` }}>{content}</ScrollView> : content}
         {footer && <View className='sheet-footer' catchMove={native}>{footer}</View>}
       </View>

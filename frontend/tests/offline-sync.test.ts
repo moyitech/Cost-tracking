@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { blankSnapshot, collectPages, inPool, mediaReferences, OfflineSnapshot, retryDelay, sameManifest, SyncManifest, SyncPorts, synchronize } from '../src/offline-sync'
+import { blankSnapshot, collectPages, inPool, mediaReferences, mediaRetentionKeys, OfflineSnapshot, retryDelay, sameManifest, SyncManifest, SyncPorts, synchronize } from '../src/offline-sync'
 import { newItem } from '../src/domain'
 
 const manifest = (version = '1', checked_at = '2026-10-25T02:00:00Z'): SyncManifest => ({ profile_version: 'p1', presets_version: 'preset1', preset_versions: { illustration: '3' }, spaces: [{ id: 'personal', version }, { id: 'family', version }], checked_at })
@@ -38,6 +38,18 @@ test('unchanged heartbeat persists new server time without fetching any records'
   await synchronize(f.current, f.ports, () => true)
   assert.deepEqual(f.loaded, [])
   assert.equal(f.current.lastSyncedAt, '2026-10-25T02:01:00Z')
+})
+
+test('an unchanged heartbeat retains browsed presets without requiring downloads of the full catalog', async () => {
+  const f = fixture(); await synchronize(blankSnapshot(), f.ports, () => true)
+  f.pictures.length = 0
+  let retained = new Set<string>()
+  f.ports.prune = async keys => { retained = keys }
+  await synchronize(f.current, f.ports, () => true)
+  assert.ok(retained.has('preset:illustration:3:preview'))
+  assert.ok(!retained.has('preset:illustration:2:preview'))
+  assert.ok(!f.pictures.some(key => key.startsWith('preset:')))
+  assert.deepEqual(retained, mediaRetentionKeys(f.current))
 })
 
 test('only a changed space is replaced, including deleted or transferred records', async () => {

@@ -504,9 +504,6 @@ body .taro_page::-webkit-scrollbar { display: none; }
 .skeleton-card { height: 0; padding-top: 145%; border-radius: 16px; background: #eff3f1; }
 .identity-photo-wrap.is-disabled { opacity: 1; cursor: default; }
 
-.image-picker-footer .text-button { min-height: 44px; flex-shrink: 0; }
-
-
 // Family invitation: a single focused card on both sides of the share flow.
 .invite-selection-note { display: block; color: $muted; font-size: 12px; line-height: 1.7; margin: 16px 0 0; }
 .invite-code-card { text-align: center; padding: 2px 0 0; }

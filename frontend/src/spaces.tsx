@@ -3,7 +3,8 @@ import { Image, Text, View } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import { Action, choosePictures, ErrorNote, Field, Sheet, SymbolIcon, useSubmit } from './components'
 import { Space, roleLabels, uid } from './domain'
-import { fileUrl, mockEnabled, readMediaEpoch, subscribeMedia } from './services'
+import { mockEnabled } from './services'
+import { useImagePreview } from './use-image-preview'
 import { scannedInvitationPath } from './invitation-share'
 import { useLedger } from './store'
 import { cropAvatarImage, persistSquarePreview } from './local-image'
@@ -14,25 +15,8 @@ import { hasAvatarChanges } from './avatar-draft'
 import './spaces.scss'
 
 export function LedgerAvatar({ kind = 'personal', src = '', fileId, size = '', fallback = '我' }: { kind?: Space['kind']; src?: string; fileId?: string; size?: 'small' | 'medium' | 'large' | ''; fallback?: string }) {
-  const [mediaEpoch, setMediaEpoch] = useState(readMediaEpoch)
-  useEffect(() => subscribeMedia(() => setMediaEpoch(readMediaEpoch())), [])
-  const resource = `${src}:${fileId || ''}`
-  const [image, setImage] = useState({ resource, url: src })
-  const retried = useRef(false)
-  useEffect(() => {
-    let active = true; retried.current = false
-    setImage({ resource, url: src })
-    if (fileId && !mockEnabled) void fileUrl(fileId).then(url => { if (active) setImage({ resource, url }) }).catch(() => {})
-    return () => { active = false }
-  }, [resource, mediaEpoch])
-  const recover = () => {
-    if (fileId && !mockEnabled && !retried.current) {
-      retried.current = true
-      void fileUrl(fileId, true).then(url => setImage(current => current.resource === resource ? { resource, url } : current)).catch(() => setImage(current => current.resource === resource ? { resource, url: '' } : current))
-    } else setImage(current => current.resource === resource ? { resource, url: '' } : current)
-  }
-  const url = image.resource === resource ? image.url : src
-  return <View className={`ledger-avatar ledger-avatar-${kind} ${size ? `ledger-avatar-${size}` : ''}`}>{url ? <Image className='ledger-avatar-image' src={url} mode='aspectFill' onError={recover} /> : kind === 'family' ? <SymbolIcon name='home' /> : <Text>{fallback}</Text>}</View>
+  const { url, imageKey, recover } = useImagePreview({ src, fileId })
+  return <View className={`ledger-avatar ledger-avatar-${kind} ${size ? `ledger-avatar-${size}` : ''}`}>{url ? <Image key={imageKey} className='ledger-avatar-image' src={url} mode='aspectFill' onError={recover} /> : kind === 'family' ? <SymbolIcon name='home' /> : <Text>{fallback}</Text>}</View>
 }
 
 export function SpaceMenuRow({ icon, title, caption, trailing, onClick, disabled = false }: { icon: Parameters<typeof SymbolIcon>[0]['name']; title: string; caption?: string; trailing?: string; onClick: () => void; disabled?: boolean }) {

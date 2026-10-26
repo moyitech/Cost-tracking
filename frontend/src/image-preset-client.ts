@@ -12,11 +12,14 @@ export function createPresetCatalog(request: Request, now = Date.now) {
   let catalog: ImagePreset[] | undefined
   let expires = 0
   let listing: Promise<ImagePreset[]> | undefined
+  let generation = 0
   const fresh = (entry?: PresetAccess) => !!entry && Date.parse(entry.expires_at) > now() + 30000
   const list = async (force = false): Promise<ImagePreset[]> => {
     if (listing) return listing
     if (!force && catalog && expires > now() + 30000) return catalog
-    listing = request<{ items: ApiImagePreset[] }>('/image-presets').then(({ items }) => {
+    const run = generation
+    const task = request<{ items: ApiImagePreset[] }>('/image-presets').then(({ items }) => {
+      if (run !== generation) return list()
       for (const item of items) {
         access.set(`${item.id}:preview`, { url: item.preview_url, expires_at: item.expires_at })
         access.set(`${item.id}:original`, { url: item.url, expires_at: item.expires_at })
@@ -24,8 +27,9 @@ export function createPresetCatalog(request: Request, now = Date.now) {
       expires = items.length ? Math.min(...items.map(i => Date.parse(i.expires_at))) : now() + 60000
       catalog = items.map(i => ({ id: i.id, name: i.name, style: i.style, src: i.preview_url }))
       return catalog
-    }).finally(() => { listing = undefined })
-    return listing
+    }).catch(error => { if (run !== generation) return list(); throw error }).finally(() => { if (listing === task) listing = undefined })
+    listing = task
+    return task
   }
   const url = async (id: string, force = false, size: 'preview' | 'original' = 'preview'): Promise<string> => {
     const key = `${id}:${size}`
@@ -33,11 +37,14 @@ export function createPresetCatalog(request: Request, now = Date.now) {
     if (current) return current
     const cached = access.get(key)
     if (!force && fresh(cached)) return cached!.url
+    const run = generation
     const task = request<PresetAccess>(`/image-presets/${encodeURIComponent(id)}/access?size=${size}`).then(entry => {
+      if (run !== generation) return url(id, false, size)
       access.set(key, entry); return entry.url
-    }).finally(() => { pending.delete(key) })
+    }).catch(error => { if (run !== generation) return url(id, false, size); throw error }).finally(() => { if (pending.get(key) === task) pending.delete(key) })
     pending.set(key, task)
     return task
   }
-  return { list, url }
+  const invalidate = () => { generation++; catalog = undefined; expires = 0; access.clear(); pending.clear(); listing = undefined }
+  return { list, url, invalidate }
 }

@@ -11,7 +11,7 @@ export type SyncPorts = {
   save(snapshot: OfflineSnapshot): Promise<void>
   publish(snapshot: OfflineSnapshot): void
   media(ref: MediaRef): Promise<void>
-  prune(refs: MediaRef[]): Promise<void>
+  prune(keys: Set<string>): Promise<void>
   revoke?(): Promise<void>
 }
 export const blankSnapshot = (): OfflineSnapshot => ({ version: 2, data: { version: 1, items: [], spaces: [] }, remote: {}, manifest: null, lastSyncedAt: null })
@@ -69,6 +69,14 @@ export function mediaReferences(snapshot: OfflineSnapshot): MediaRef[] {
   return [...refs.values()]
 }
 
+// Public presets remain useful in the picker even before an item selects them.
+// Retention does not download the entire catalog; only referenced media is required.
+export function mediaRetentionKeys(snapshot: OfflineSnapshot): Set<string> {
+  const keys = new Set(mediaReferences(snapshot).map(ref => ref.key))
+  for (const [id, version] of Object.entries(snapshot.manifest?.preset_versions || {})) keys.add(`preset:${id}:${version}:preview`)
+  return keys
+}
+
 export function restrictSnapshot(snapshot: OfflineSnapshot, allowed: Set<string>): OfflineSnapshot {
   return { ...snapshot, data: { ...snapshot.data, spaces: snapshot.data.spaces.filter(s => allowed.has(s.id)), items: snapshot.data.items.filter(i => allowed.has(i.spaceId)) },
     remote: Object.fromEntries(Object.entries(snapshot.remote).filter(([id]) => allowed.has(id))) }
@@ -83,7 +91,7 @@ export async function synchronize(previous: OfflineSnapshot, ports: SyncPorts, v
     // Revoke visibility immediately, even if storage is full or the next request fails.
     ports.publish(previous)
     await ports.revoke?.(); assertCurrent()
-    await ports.prune(mediaReferences(previous)); assertCurrent()
+    await ports.prune(mediaRetentionKeys(previous)); assertCurrent()
     await ports.save(previous); assertCurrent()
   }
   let next = previous
@@ -105,7 +113,7 @@ export async function synchronize(previous: OfflineSnapshot, ports: SyncPorts, v
   }
   const refs = mediaReferences(next)
   // Reclaim obsolete files before downloads, but never evict a still-referenced preview.
-  await ports.prune(refs); assertCurrent()
+  await ports.prune(mediaRetentionKeys(next)); assertCurrent()
   await inPool(refs, 3, async ref => { assertCurrent(); await ports.media(ref); assertCurrent() })
   const confirmed = await ports.manifest(); assertCurrent()
   if (!sameManifest(before, confirmed)) throw new Error('资料在同步期间发生变化，稍后自动重试')

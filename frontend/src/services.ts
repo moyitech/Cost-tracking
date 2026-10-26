@@ -11,6 +11,8 @@ import { prepareUploadImage } from './local-image'
 import { IMAGE_MAX_BYTES, IMAGE_MAX_EDGE, imageMime, squareImageProcessing } from './image-processing'
 import { OfflineStorage } from './offline-storage'
 import { collectPages, OfflineSnapshot, SyncManifest } from './offline-sync'
+import { PreviewCache } from './preview-cache'
+import { PresetPreloader } from './preset-preloader'
 
 const STORAGE_KEY = 'objet-ledger:v1'
 export const mockEnabled = USE_MOCK
@@ -59,29 +61,47 @@ const query = (params: Record<string, string | number | undefined | null>) => {
 const accessCache = new Map<string, { url: string; expires_at: string }>()
 const presetCatalog = createPresetCatalog(path => api.request(path))
 let offline: { user: string; storage: OfflineStorage; snapshot: OfflineSnapshot | null } | null = null
-const mediaPending = new Map<string, Promise<string>>()
+const previews = new PreviewCache()
 const originalPreviews = new Set<string>()
-const mediaListeners = new Set<() => void>(); const repairListeners = new Set<() => void>(); let mediaEpoch = 0
-export const subscribeMedia = (listener: () => void) => { mediaListeners.add(listener); return () => { mediaListeners.delete(listener) } }
-export const readMediaEpoch = () => mediaEpoch
+const catalogListeners = new Set<() => void>(); const repairListeners = new Set<() => void>()
+export const subscribeMedia = (listener: (key: string | null) => void) => previews.subscribe(listener)
+export const subscribeImagePresets = (listener: () => void) => { catalogListeners.add(listener); return () => { catalogListeners.delete(listener) } }
 export const subscribeCacheRepair = (listener: () => void) => { repairListeners.add(listener); return () => { repairListeners.delete(listener) } }
-const notifyMedia = () => { mediaEpoch++; mediaListeners.forEach(listener => listener()) }
 export function offlineStorage() {
   const user = accountId()
   if (!user) throw new Error('首次使用需要联网登录')
-  if (offline?.user !== user) { offline?.storage.dispose(); offline = { user, storage: new OfflineStorage(API_BASE_URL, user, Taro), snapshot: null }; notifyMedia() }
+  if (offline?.user !== user) { offline?.storage.dispose(); offline = { user, storage: new OfflineStorage(API_BASE_URL, user, Taro), snapshot: null }; previews.reset(); presetPreloader.reset() }
   return offline.storage
 }
 export function activateOfflineSnapshot(snapshot: OfflineSnapshot) {
-  offlineStorage(); const previous = offline!.snapshot?.manifest?.presets_version
+  offlineStorage(); const previous = offline!.snapshot?.manifest
   offline!.snapshot = snapshot
-  if (previous !== snapshot.manifest?.presets_version) notifyMedia()
+  if (previous?.presets_version !== snapshot.manifest?.presets_version) {
+    presetCatalog.invalidate()
+    catalogListeners.forEach(listener => listener())
+    const versions = snapshot.manifest?.preset_versions || {}
+    for (const id of new Set([...Object.keys(previous?.preset_versions || {}), ...Object.keys(versions)])) {
+      if (previous?.preset_versions[id] !== versions[id]) previews.notify(imagePreviewKey({ presetId: id }))
+    }
+  }
 }
 export async function clearOfflineAccount(user: string) {
   const storage = offline?.user === user ? offline.storage : new OfflineStorage(API_BASE_URL, user, Taro)
-  if (offline?.user === user) offline = null
+  if (offline?.user === user) { offline = null; previews.reset(); presetCatalog.invalidate(); presetPreloader.reset() }
   if (process.env.TARO_ENV === 'h5') { for (const url of originalPreviews) URL.revokeObjectURL(url); originalPreviews.clear() }
   await storage.clear()
+}
+export async function pruneImagePreviews(storage: OfflineStorage, keys: Set<string>) {
+  await storage.prune(keys)
+  if (offline?.storage === storage) previews.retain(keys)
+}
+export type PreviewSource = { fileId?: string; presetId?: string }
+export function imagePreviewKey({ fileId, presetId }: PreviewSource) {
+  return presetId ? `preset:${presetId}:${offline?.snapshot?.manifest?.preset_versions[presetId] || '1'}:preview` : fileId ? `file:${fileId}:preview-v1` : ''
+}
+export function cachedImagePreview(source: PreviewSource) {
+  if (mockEnabled && source.presetId) return { url: bundledPresets.find(p => p.id === source.presetId)?.src || '', revision: 0 }
+  return offline?.user === accountId() ? previews.peek(imagePreviewKey(source)) : undefined
 }
 async function originalResource(signed: () => Promise<string>, preview: () => Promise<string>): Promise<string> {
   const user = accountId()
@@ -105,23 +125,32 @@ async function originalResource(signed: () => Promise<string>, preview: () => Pr
     } finally { clearTimeout(timer) }
   } catch { if (user !== accountId()) throw new Error('账号已变化'); return preview() }
 }
-async function previewResource(key: string, signed: () => Promise<string>, force = false): Promise<string> {
-  const storage = offlineStorage(); const user = accountId(); const pendingKey = `${user}:${key}`
-  const pending = mediaPending.get(pendingKey); if (pending) return pending
-  const task = (async () => {
+async function previewResource(key: string, signed: () => Promise<string>, force = false, requestRepair = true): Promise<string> {
+  const storage = offlineStorage()
+  return previews.load(key, async () => {
     if (force) await storage.evictMedia(key)
     const cached = await storage.mediaUrl(key)
     if (cached) return cached
-    repairListeners.forEach(listener => listener())
+    if (requestRepair) repairListeners.forEach(listener => listener())
     const url = await signed()
     return storage.cacheMedia(key, url)
-  })().finally(() => { mediaPending.delete(pendingKey) })
-  mediaPending.set(pendingKey, task); return task
+  }, force)
 }
 export const listImagePresets = (force = false) => mockEnabled ? Promise.resolve(bundledPresets) : presetCatalog.list(force)
+const presetPreloader = new PresetPreloader({
+  list: () => listImagePresets(),
+  // Proactive cache misses must not start another full ledger sync.
+  preview: id => previewResource(imagePreviewKey({ presetId: id }), () => presetCatalog.url(id), false, false),
+})
+export function preloadImagePresets(canRun: () => boolean): Promise<void> {
+  const user = accountId(); const version = offline?.snapshot?.manifest?.presets_version
+  if (mockEnabled || !user || version === undefined) return Promise.resolve()
+  return presetPreloader.run(JSON.stringify([user, version]), () => canRun() && user === accountId()
+    && offline?.user === user && version === offline.snapshot?.manifest?.presets_version)
+}
 export async function imagePresetUrl(id: string, force = false, size: 'preview' | 'original' = 'preview'): Promise<string> {
   if (mockEnabled) return bundledPresets.find(p => p.id === id)?.src || ''
-  const key = `preset:${id}:${offline?.snapshot?.manifest?.preset_versions[id] || '1'}:preview`
+  const key = imagePreviewKey({ presetId: id })
   const preview = () => previewResource(key, () => presetCatalog.url(id, force, 'preview'), size === 'preview' && force)
   if (size === 'original') return originalResource(() => presetCatalog.url(id, force, size), preview)
   return preview()

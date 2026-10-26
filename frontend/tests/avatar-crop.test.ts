@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { avatarCropRect, chooseAvatarCrop, cropNativeAvatar, initialAvatarCrop, moveAvatarCrop, positionedAvatarCrop, supportsNativeAvatarCrop, zoomAvatarCrop } from '../src/avatar-crop'
+import { avatarCropRect, chooseAvatarCrop, cropNativeAvatar, hasNativeCropRounding, initialAvatarCrop, moveAvatarCrop, positionedAvatarCrop, supportsNativeAvatarCrop, zoomAvatarCrop } from '../src/avatar-crop'
 
 test('landscape, portrait and square sources select an actual square in original pixels', () => {
   assert.deepEqual(avatarCropRect({ width: 900, height: 300 }, initialAvatarCrop()), { x: 300, y: 0, side: 300, outputSize: 300, zoom: 1 })
@@ -72,9 +72,59 @@ test('unsupported and failed native crop routes to in-app cropping, never the or
   assert.deepEqual(await chooseAvatarCrop('original', { ...port, supported: false }), { kind: 'fallback' })
   assert.equal(called, false)
   assert.deepEqual(await chooseAvatarCrop('original', { ...port, crop: async () => { throw { errMsg: 'cropImage:fail not supported' } } }), { kind: 'fallback' })
-  assert.deepEqual(await chooseAvatarCrop('original', { ...port, crop: async () => ({ tempFilePath: '' }) }), { kind: 'fallback' })
-  assert.deepEqual(await chooseAvatarCrop('original', { ...port, inspect: async () => ({ width: 100, height: 99 }) }), { kind: 'fallback' })
-  assert.deepEqual(await chooseAvatarCrop('original', { ...port, inspect: async () => { throw new Error('unreadable result') } }), { kind: 'fallback' })
+})
+
+test('a successful native crop never opens fallback for an empty, unreadable or non-square result', async () => {
+  let cropCalls = 0; let reads = 0
+  const port = { supported: true, crop: async () => { cropCalls++; return { tempFilePath: 'confirmed' } }, inspect: async () => ({ width: 100, height: 100 }) }
+  await assert.rejects(() => chooseAvatarCrop('original', { ...port, crop: async () => ({ tempFilePath: '' }) }), /裁剪结果/)
+  await assert.rejects(() => chooseAvatarCrop('original', { ...port, inspect: async () => ({ width: 100, height: 90 }) }), /正方形/)
+  await assert.rejects(() => chooseAvatarCrop('original', { ...port, inspect: async path => { reads++; assert.equal(path, 'confirmed'); throw { errMsg: 'getImageInfo:fail' } } }), /裁剪结果暂时无法读取/)
+  assert.equal(cropCalls, 2)
+  assert.equal(reads, 3)
+})
+
+test('temporary native result read failures retry the confirmed file without another crop', async () => {
+  let cropCalls = 0; let reads = 0
+  const result = await chooseAvatarCrop('original', {
+    supported: true,
+    crop: async () => { cropCalls++; return { tempFilePath: 'confirmed' } },
+    inspect: async path => { assert.equal(path, 'confirmed'); if (++reads < 3) throw { errMsg: 'getImageInfo:fail' }; return { width: 900, height: 900 } },
+    normalize: async () => { throw new Error('square crops need no adjustment') },
+  })
+  assert.deepEqual(result, { kind: 'cropped', path: 'confirmed' })
+  assert.equal(cropCalls, 1)
+  assert.equal(reads, 3)
+})
+
+test('one-pixel native rounding is corrected only on confirmed pixels and the result stays square', async () => {
+  for (const size of [{ width: 1024, height: 1023 }, { width: 1023, height: 1024 }]) {
+    const events: string[] = []
+    const result = await chooseAvatarCrop('original', {
+      supported: true,
+      crop: async () => { events.push('crop'); return { tempFilePath: 'confirmed' } },
+      inspect: async path => { events.push('inspect:' + path); return path === 'confirmed' ? size : { width: 512, height: 512 } },
+      normalize: async (path, dimensions) => {
+        events.push('normalize:' + path)
+        assert.deepEqual(dimensions, size)
+        const rect = avatarCropRect(dimensions, initialAvatarCrop())
+        assert.equal(rect.side, 1023)
+        assert.equal(rect.outputSize, 512)
+        assert.ok(rect.x + rect.y <= 1)
+        return 'normalized'
+      },
+    })
+    assert.deepEqual(result, { kind: 'cropped', path: 'normalized' })
+    assert.deepEqual(events, ['crop', 'inspect:confirmed', 'normalize:confirmed', 'inspect:normalized'])
+  }
+  for (const size of [{ width: 100, height: 98 }, { width: 100, height: 100 }, { width: 0, height: 1 }, { width: NaN, height: 100 }, { width: 1.5, height: 2.5 }]) assert.equal(hasNativeCropRounding(size), false)
+})
+
+test('normalization failure or malformed output reports an error instead of reopening a cropper', async () => {
+  const port = { supported: true, crop: async () => ({ tempFilePath: 'confirmed' }), inspect: async () => ({ width: 100, height: 99 }) }
+  await assert.rejects(() => chooseAvatarCrop('original', { ...port, normalize: async () => { throw new Error('canvas failed') } }), /裁剪结果处理失败/)
+  await assert.rejects(() => chooseAvatarCrop('original', { ...port, normalize: async () => '' }), /裁剪结果/)
+  await assert.rejects(() => chooseAvatarCrop('original', { ...port, normalize: async () => 'still-not-square' }), /正方形/)
 })
 
 test('desktop, DevTools and unknown hosts skip a misleading native capability advertisement', () => {

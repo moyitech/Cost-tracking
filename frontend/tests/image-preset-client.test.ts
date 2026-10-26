@@ -35,3 +35,38 @@ test('disabled presets can still be resolved individually, and failed requests c
   assert.deepEqual(await catalog.list(), [])
   assert.equal(await catalog.url('disabled-v1', false, 'original'), 'disabled-original')
 })
+
+test('manifest invalidation reloads a disabled catalog entry before signed URLs expire', async () => {
+  let enabled = true; let calls = 0
+  const catalog = createPresetCatalog(async <T>(): Promise<T> => {
+    calls++
+    return { items: enabled ? [{ id: 'phone', name: '手机', style: 'cartoon', version: 1, url: 'old', preview_url: 'old-preview', expires_at: '2099-01-01' }] : [] } as T
+  })
+  assert.equal((await catalog.list()).length, 1)
+  enabled = false; catalog.invalidate()
+  assert.deepEqual(await catalog.list(), []); assert.equal(calls, 2)
+})
+
+test('a late old catalog response cannot restore entries removed by a newer manifest', async () => {
+  let release!: (value: { items: ApiImagePreset[] }) => void; let calls = 0
+  const catalog = createPresetCatalog(async <T>(): Promise<T> => {
+    calls++
+    return (calls === 1 ? await new Promise<{ items: ApiImagePreset[] }>(resolve => { release = resolve }) : { items: [] }) as T
+  })
+  const old = catalog.list(); catalog.invalidate()
+  assert.deepEqual(await catalog.list(), [])
+  release({ items: [{ id: 'removed', name: '旧预设', style: 'cartoon', version: 1, url: 'old', preview_url: 'old-preview', expires_at: '2099-01-01' }] })
+  assert.deepEqual(await old, []); assert.deepEqual(await catalog.list(), []); assert.equal(calls, 2)
+})
+
+test('invalidation also fences late signed URLs', async () => {
+  let release!: (value: { url: string; expires_at: string }) => void; let calls = 0
+  const catalog = createPresetCatalog(async <T>(): Promise<T> => {
+    calls++
+    return (calls === 1 ? await new Promise<{ url: string; expires_at: string }>(resolve => { release = resolve }) : { url: 'new-preview', expires_at: '2099-01-01' }) as T
+  })
+  const old = catalog.url('phone'); catalog.invalidate()
+  assert.equal(await catalog.url('phone'), 'new-preview')
+  release({ url: 'old-preview', expires_at: '2099-01-01' })
+  assert.equal(await old, 'new-preview'); assert.equal(await catalog.url('phone'), 'new-preview'); assert.equal(calls, 2)
+})

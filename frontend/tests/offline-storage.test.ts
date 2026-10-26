@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, readFile, writeFile, rename, copyFile, unlink, readdir,
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { OfflineStorage } from '../src/offline-storage'
-import { blankSnapshot } from '../src/offline-sync'
+import { blankSnapshot, synchronize } from '../src/offline-sync'
 
 const snapshot = (time: string | null = null) => ({ ...blankSnapshot(), lastSyncedAt: time })
 
@@ -99,5 +99,31 @@ test('WeChat persists previews and account disposal fences a late download', asy
     await a.clear(); release(); await rejected
     assert.equal(await new OfflineStorage('api', 'native', f.platform as any).mediaUrl('late'), null)
     assert.equal(await cold.mediaUrl('preview'), null)
+  } finally { if (previousEnv === undefined) delete process.env.TARO_ENV; else process.env.TARO_ENV = previousEnv; await rm(f.root, { recursive: true, force: true }) }
+})
+
+test('WeChat heartbeat preserves browsed presets across reopening while pruning old versions and private orphans', async () => {
+  const previousEnv = process.env.TARO_ENV; process.env.TARO_ENV = 'weapp'
+  const f = await nativeFixture(); let downloads = 0
+  f.platform.downloadFile = async () => {
+    downloads++; const tempFilePath = path.join(f.root, 'download-' + downloads)
+    await writeFile(tempFilePath, 'image-bytes')
+    return { statusCode: 200, tempFilePath }
+  }
+  try {
+    const storage = new OfflineStorage('api', 'native', f.platform as any)
+    const retained = 'preset:browsed:2:preview'; const obsolete = 'preset:browsed:1:preview'; const orphan = 'file:revoked:preview-v1'
+    for (const key of [retained, obsolete, orphan]) await storage.cacheMedia(key, 'https://image.test')
+    const state = { ...snapshot(), manifest: { profile_version: '1', presets_version: '2', preset_versions: { browsed: '2' }, spaces: [], checked_at: '2026-10-26T00:00:00Z' } }
+    await synchronize(state, {
+      manifest: async () => state.manifest,
+      metadata: async () => { throw new Error('unchanged metadata should not be fetched') },
+      space: async () => { throw new Error('no space to fetch') },
+      save: value => storage.writeSnapshot(value), publish: () => {},
+      prune: keys => storage.prune(keys), media: async () => { throw new Error('unselected presets are not required downloads') },
+    }, () => true)
+    const reopened = new OfflineStorage('api', 'native', f.platform as any)
+    assert.ok(await reopened.cacheMedia(retained, 'https://image.test')); assert.equal(downloads, 3)
+    assert.equal(await reopened.mediaUrl(obsolete), null); assert.equal(await reopened.mediaUrl(orphan), null)
   } finally { if (previousEnv === undefined) delete process.env.TARO_ENV; else process.env.TARO_ENV = previousEnv; await rm(f.root, { recursive: true, force: true }) }
 })

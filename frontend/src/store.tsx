@@ -3,7 +3,7 @@ import Taro from '@tarojs/taro'
 import { Command } from './commands'
 import { mergeCommandResult } from './family-state'
 import { Ledger, today } from './domain'
-import { accountId, activateOfflineSnapshot, api, clearOfflineAccount, fetchOfflineSpace, fileUrl, imagePresetUrl, mockEnabled, offlineStorage, readLedgerCache, remote, removeLedgerCache, repository, subscribeAccount, subscribeCacheRepair } from './services'
+import { accountId, activateOfflineSnapshot, api, clearOfflineAccount, fetchOfflineSpace, fileUrl, imagePresetUrl, mockEnabled, offlineStorage, preloadImagePresets, pruneImagePreviews, readLedgerCache, remote, removeLedgerCache, repository, subscribeAccount, subscribeCacheRepair } from './services'
 import { emptyRemote, SyncGate, validCache } from './ledger-cache'
 import type { RemoteState } from './ledger-cache'
 import { blankSnapshot, isSnapshot, OfflineSnapshot, retryDelay, synchronize } from './offline-sync'
@@ -22,8 +22,20 @@ export function LedgerProvider({ children }: PropsWithChildren) {
   const selected = useRef(spaceId); const owner = useRef(accountId()); const gate = useRef(new SyncGate())
   const [loading, setLoading] = useState(false); const [error, setError] = useState(''); const [detailError, setDetailError] = useState(''); const [detailLoading, setDetailLoading] = useState(false)
   const foreground = useRef(true); const booted = useRef(false); const failures = useRef(0); const nextCheck = useRef(0)
+  const connected = useRef(true); const syncing = useRef(false)
+  const preloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null); const request = useRef<() => void>(() => {})
   const stopTimer = () => { if (timer.current) clearTimeout(timer.current); timer.current = null }
+  const stopPreload = () => { if (preloadTimer.current) clearTimeout(preloadTimer.current); preloadTimer.current = null }
+  const schedulePreload = () => {
+    stopPreload()
+    if (mockEnabled || !booted.current || !foreground.current || !connected.current || syncing.current) return
+    const token = gate.current.token()
+    preloadTimer.current = setTimeout(() => {
+      preloadTimer.current = null
+      void preloadImagePresets(() => booted.current && foreground.current && connected.current && !syncing.current && gate.current.accepts(token))
+    }, 750)
+  }
   const schedule = (delay: number) => {
     stopTimer(); nextCheck.current = Date.now() + delay
     if (foreground.current) timer.current = setTimeout(() => request.current(), delay)
@@ -41,7 +53,7 @@ export function LedgerProvider({ children }: PropsWithChildren) {
     if (!booted.current) return
     let identity = owner.current
     const valid = () => gate.current.accepts(token) && identity === owner.current
-    setLoading(true); setError('')
+    stopPreload(); syncing.current = true; setLoading(true); setError('')
     try {
       if (mockEnabled) { publish({ ...blankSnapshot(), data: await repository.load(), lastSyncedAt: new Date().toISOString() }); return }
       if (!accountId()) {
@@ -57,14 +69,14 @@ export function LedgerProvider({ children }: PropsWithChildren) {
         save: next => { if (!valid()) throw new Error('同步已取消'); return storage.writeSnapshot(next) },
         publish: next => { if (valid()) publish(next) },
         media: async ref => { if (ref.fileId) await fileUrl(ref.fileId); else if (ref.presetId) await imagePresetUrl(ref.presetId) },
-        prune: refs => storage.prune(new Set(refs.map(r => r.key))),
+        prune: keys => pruneImagePreviews(storage, keys),
         revoke: () => { removeLedgerCache(identity); return storage.dropSnapshot() },
       }, valid)
       if (valid()) { failures.current = 0; removeLedgerCache(identity) }
     } catch (e) {
       if (valid()) { failures.current++; setError(e instanceof Error ? e.message : '同步失败，请重试') }
     } finally {
-      if (valid()) { setLoading(false); schedule(failures.current ? retryDelay(failures.current) : 60000) }
+      if (valid()) { syncing.current = false; setLoading(false); schedule(failures.current ? retryDelay(failures.current) : 60000); if (!failures.current) schedulePreload() }
     }
   }), [])
   request.current = () => { if (booted.current && foreground.current) void refresh() }
@@ -96,7 +108,7 @@ export function LedgerProvider({ children }: PropsWithChildren) {
       if (owner.current === id) return
       const previous = owner.current; owner.current = id
       if (!previous) return
-      gate.current.invalidate(); stopTimer(); booted.current = false; failures.current = 0; nextCheck.current = 0
+      gate.current.invalidate(); stopTimer(); stopPreload(); syncing.current = false; booted.current = false; failures.current = 0; nextCheck.current = 0
       removeLedgerCache(previous); void clearOfflineAccount(previous).catch(() => {})
       selected.current = ''; current.current = blankSnapshot(); setSnapshot(current.current); setSpace(''); setLoading(false); setDetailError(''); setDetailLoading(false)
       void boot()
@@ -105,15 +117,15 @@ export function LedgerProvider({ children }: PropsWithChildren) {
     const show = () => {
       foreground.current = true
       if (!booted.current) return
-      if (Date.now() >= nextCheck.current) request.current(); else schedule(nextCheck.current - Date.now())
+      if (Date.now() >= nextCheck.current) request.current(); else { schedule(nextCheck.current - Date.now()); schedulePreload() }
     }
-    const hide = () => { foreground.current = false; stopTimer() }
-    const network = (event: { isConnected: boolean }) => { if (event.isConnected && foreground.current) { nextCheck.current = 0; show() } }
+    const hide = () => { foreground.current = false; stopTimer(); stopPreload() }
+    const network = (event: { isConnected: boolean }) => { connected.current = event.isConnected; if (!event.isConnected) stopPreload(); else if (foreground.current) { nextCheck.current = 0; show() } }
     const visibility = () => { if (document.visibilityState === 'hidden') hide(); else show() }
     Taro.onAppShow?.(show); Taro.onAppHide?.(hide); Taro.onNetworkStatusChange(network)
     if (process.env.TARO_ENV === 'h5') document.addEventListener('visibilitychange', visibility)
     void boot()
-    return () => { disposed = true; gate.current.invalidate(); stopTimer(); unsubscribe(); unsubscribeRepair(); Taro.offAppShow?.(show); Taro.offAppHide?.(hide); Taro.offNetworkStatusChange(network); if (process.env.TARO_ENV === 'h5') document.removeEventListener('visibilitychange', visibility) }
+    return () => { disposed = true; gate.current.invalidate(); stopTimer(); stopPreload(); unsubscribe(); unsubscribeRepair(); Taro.offAppShow?.(show); Taro.offAppHide?.(hide); Taro.offNetworkStatusChange(network); if (process.env.TARO_ENV === 'h5') document.removeEventListener('visibilitychange', visibility) }
   }, [refresh])
   useEffect(() => {
     let date = today()
@@ -152,11 +164,11 @@ export function LedgerProvider({ children }: PropsWithChildren) {
   }
   const importSaved = async (id: string) => {
     if (mockEnabled) return
-    gate.current.invalidate(); setLoading(false)
+    gate.current.invalidate(); syncing.current = false; stopPreload(); setLoading(false)
     await loadDetail(id); void refresh()
   }
   const execute = async (command: Command) => {
-    gate.current.invalidate(); setLoading(false)
+    gate.current.invalidate(); syncing.current = false; stopPreload(); setLoading(false)
     const identity = owner.current
     let next: Ledger
     try { next = await repository.execute(command, current.current.data) }

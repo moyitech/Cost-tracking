@@ -1,6 +1,6 @@
 import Taro from '@tarojs/taro'
 import { assertSquareImage, AVATAR_IMAGE_OPTIONS, createImageQueue, ImageEncoder, imageDimensions, ImageProcessingOptions, ImageSize, isLongScreenshot, processImage, ProcessedImage } from './image-processing'
-import { AvatarCrop, avatarCropRect, chooseAvatarCrop, supportsNativeAvatarCrop } from './avatar-crop'
+import { AvatarCrop, avatarCropRect, chooseAvatarCrop, initialAvatarCrop, supportsNativeAvatarCrop } from './avatar-crop'
 
 export const IMAGE_CANVAS_ID = 'local-image-canvas'
 const enqueue = createImageQueue()
@@ -108,6 +108,8 @@ export function cropAvatarImage(path: string) {
     supported,
     crop: options => Taro.cropImage(options),
     inspect: src => Taro.getImageInfo({ src }),
+    // Reuse the pixel exporter on the user's confirmed crop, never on the original.
+    normalize: (src, size) => exportNativeAvatarCrop({ ...size, original: src, preview: src }, initialAvatarCrop()),
   })
 }
 
