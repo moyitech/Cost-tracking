@@ -2,7 +2,7 @@ import type { ServerMetrics } from './api-types'
 import { validateItemImage } from './item-image'
 export type Status = 'active' | 'sold' | 'retired'
 export type Role = 'admin' | 'editor' | 'viewer'
-export type Space = { id: string; name: string; kind: 'personal' | 'family'; role: Role; avatar?: string; avatarFileId?: string; memberCount?: number; itemCount?: number; members: { id: string; name: string; role: Role; userId?: string; revision?: number }[] }
+export type Space = { id: string; name: string; kind: 'personal' | 'family'; role: Role; avatar?: string; avatarFileId?: string; memberCount?: number; itemCount?: number; members: { id: string; name: string; role: Role; userId?: string; revision?: number; avatarFileId?: string }[] }
 export type Profile = { id: string; displayName: string; avatar?: string; avatarFileId?: string }
 export type Expense = { id: string; category: string; amount: number; date: string; note: string; attachmentFileIds?: string[] }
 export type Audit = { id: string; title: string; occurredOn: string | null; recordedAt: string; actor: string; detail?: string }

@@ -21,8 +21,8 @@ class FakeStorage:
     def complete(self, file):
         self.completed.append(file.id)
 
-    def access_url(self, file):
-        return "https://cos.example.test/" + file.object_key
+    def access_url(self, file, size="original"):
+        return "https://cos.example.test/" + file.object_key + ("?preview=1" if size == "preview" else "")
 
     def preset_url(self, preset, size):
         key = preset.preview_object_key if size == "preview" else preset.object_key

@@ -1,6 +1,6 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Input, Text, View } from '@tarojs/components'
-import Taro, { usePullDownRefresh, useRouter, useDidShow, useShareAppMessage } from '@tarojs/taro'
+import Taro, { useDidHide, usePullDownRefresh, useRouter, useShareAppMessage } from '@tarojs/taro'
 import { Action, choosePictures, Empty, ErrorNote, Header, Icon, Photo, Pill, SymbolIcon } from '../../components'
 import { canEdit, isDisposed, Item, metrics, money, newestItemsFirst, spaceDaily, statusLabels } from '../../domain'
 import { ItemForm } from '../../forms'
@@ -12,22 +12,31 @@ import { Analysis, Records, Spaces } from './sections'
 import { invitationShareMessage } from '../../invitation-share'
 import { AvatarEditor, LedgerAvatar, SpaceSwitcher } from '../../spaces'
 import type { Space } from '../../domain'
+import { SyncInfo } from '../../sync-info'
 const invitationCover = `${API_BASE_URL.replace(/\/$/, '')}/assets/invitation-cover.png?v=1`
 
 export default function Home() {
   const layout = useAdaptiveLayout()
   const router = useRouter()
-  const { data, spaceId, setSpaceId, loading, ready, error, refresh, pageError } = useLedger()
+  const { data, spaceId, setSpaceId, loading, ready, error, refresh, pageError, lastSyncedAt } = useLedger()
   const [tab, setTab] = useState<Tab>((router.params.tab as Tab) || 'items')
   const [spaceMenu, setSpaceMenu] = useState(false); const [adding, setAdding] = useState(false)
+  const [syncInfoOpen, setSyncInfoOpen] = useState(false)
   const [avatarTarget, setAvatarTarget] = useState<{ scope: Space['kind']; spaceId: string } | null>(null)
   const [query, setQuery] = useState(''); const [status, setStatus] = useState('all')
   const pickerLock = useRef(false); const [picking, setPicking] = useState(false); const [pickerError, setPickerError] = useState('')
+  useDidHide(() => setSyncInfoOpen(false))
+  useEffect(() => { setSyncInfoOpen(false) }, [tab, spaceId, spaceMenu, adding, avatarTarget])
+  useEffect(() => {
+    if (!syncInfoOpen || process.env.TARO_ENV !== 'h5') return
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setSyncInfoOpen(false) }
+    document.addEventListener('keydown', close)
+    return () => document.removeEventListener('keydown', close)
+  }, [syncInfoOpen])
   useShareAppMessage(options => {
     const dataset = (options.target as { dataset?: { token?: string; family?: string } } | undefined)?.dataset
     return invitationShareMessage(dataset, invitationCover)
   })
-  useDidShow(() => { void refresh() })
   usePullDownRefresh(() => { void refresh().finally(() => Taro.stopPullDownRefresh()) })
   const startImport = async () => {
     if (pickerLock.current) return
@@ -56,11 +65,11 @@ export default function Home() {
     return matchStatus && item.name.toLowerCase().includes(query.trim().toLowerCase())
   })), [items, status, query])
   const filterFromAnalysis = (filter: string, value: string) => { setTab('items'); setQuery(''); setStatus(filter === 'status' ? value : 'all') }
-  return <View className={`page home-page ${tab === 'spaces' ? 'space-surface' : ''}`} style={layout.style}>
+  return <View className={`page home-page ${tab === 'spaces' ? 'space-surface' : ''}`} style={layout.style} onClick={() => setSyncInfoOpen(false)} onTouchMove={syncInfoOpen ? () => setSyncInfoOpen(false) : undefined}>
     <Header hideProfile />
-    <View className='space-bar'><Action className='space-selector space-selector-refined' label={`${space?.name || '正在读取'}，展开全部空间`} expanded={spaceMenu} onClick={() => setSpaceMenu(true)}><LedgerAvatar kind={space?.kind} src={space?.kind === 'personal' ? data.profile?.avatar : space?.avatar} fileId={space?.kind === 'personal' ? data.profile?.avatarFileId : space?.avatarFileId} size='small' /><Text className='space-selector-name'>{space?.name || '正在读取'}</Text><SymbolIcon name='down' /></Action><View className='row'>{!writable && tab !== 'spaces' && <Pill>仅可查看</Pill>}<Action className='refresh-button' label='刷新当前空间' loading={loading} onClick={() => void refresh()}>{!loading && <SymbolIcon name='refresh' />}</Action></View></View>
+    <View className='space-bar'><Action className='space-selector space-selector-refined' label={`${space?.name || '正在读取'}，展开全部空间`} expanded={spaceMenu} onClick={() => setSpaceMenu(true)}><LedgerAvatar kind={space?.kind} src={space?.kind === 'personal' ? data.profile?.avatar : space?.avatar} fileId={space?.kind === 'personal' ? data.profile?.avatarFileId : space?.avatarFileId} size='small' /><Text className='space-selector-name'>{space?.name || '正在读取'}</Text><SymbolIcon name='down' /></Action><View className='row space-bar-actions'>{!writable && tab !== 'spaces' && <Pill>仅可查看</Pill>}<SyncInfo lastSyncedAt={lastSyncedAt} open={syncInfoOpen} onToggle={() => setSyncInfoOpen(value => !value)} /><Action className='refresh-button' label='刷新当前空间' loading={loading} onClick={() => void refresh()}>{!loading && <SymbolIcon name='refresh' />}</Action></View></View>
     {!ready && !error ? <View className='page-content loading-skeleton' ariaLabel='正在加载物品'><View className='skeleton-summary' />{[1, 2, 3].map(i => <View className='skeleton-card' key={i} />)}</View> : !ready && error ? <Empty title='档案暂时无法读取' text={error}><Action className='primary' onClick={() => void refresh()}>重新加载</Action></Empty> : <>
-      {error && <View className='sync-notice'><Text>同步失败，已保留本地内容</Text><Action className='text-button' onClick={() => void refresh()}>重试</Action></View>}
+      {error && <View className='sync-notice'><View><Text>同步失败，已保留本地内容</Text><Text className='sync-error-detail'>{error}</Text></View><Action className='text-button' onClick={() => void refresh()}>重试</Action></View>}
       {tab === 'items' && <View className='page-content' style={layout.style}>
         <View className='summary-card'>
           <View className='summary-main'><View><View className='row'><Text className='summary-label'>{incomplete ? '空间已知投入' : '空间累计投入'}</Text><Pill>{itemCount}件在册</Pill></View><View className={`summary-amount ${money(known).length > 11 ? 'compact-amount' : ''}`}><Text className='currency'>¥</Text><Text>{money(known)}</Text></View></View><Action className='summary-right' onClick={() => { setStatus('active'); setQuery('') }}><View><Text className='summary-label'>{daily.incomplete ? '已知日均投入' : '日均持有成本'}</Text><View className='summary-daily'><Text className='summary-count'>{daily.count > 0 && daily.incomplete === daily.count ? '待补充' : `¥${money(daily.amount)}`}</Text>{!(daily.count > 0 && daily.incomplete === daily.count) && <Text className='summary-unit'> /天</Text>}</View></View></Action></View>

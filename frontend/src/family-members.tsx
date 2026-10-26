@@ -3,7 +3,7 @@ import { Text, View } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import { Action, ErrorNote, Field, Sheet, useSubmit } from './components'
 import { Space, roleLabels } from './domain'
-import { familyApi, FamilyMember, mockEnabled } from './services'
+import { FamilyMember, mockEnabled } from './services'
 import { canManageMember, orderedMembers } from './family-state'
 import { useLedger } from './store'
 import { LedgerAvatar } from './spaces'
@@ -11,7 +11,7 @@ import { LedgerAvatar } from './spaces'
 const roleDescriptions = { admin: '家庭管理者', editor: '可添加、整理和编辑家庭物品', viewer: '仅查看家庭物品与记录' }
 
 export function FamilyMembers({ space, onLayoutChange }: { space: Space; onLayoutChange: () => void }) {
-  const { data, execute } = useLedger()
+  const { data, execute, refresh } = useLedger()
   const [me, setMe] = useState<FamilyMember | null>(null)
   const [members, setMembers] = useState<FamilyMember[]>([])
   const [cursor, setCursor] = useState<string | null>(null)
@@ -25,10 +25,9 @@ export function FamilyMembers({ space, onLayoutChange }: { space: Space; onLayou
   const load = async (more = false) => {
     const run = ++generation.current; setLoading(true); setLoadError('')
     try {
-      const [page, own] = mockEnabled ? (() => {
-        const items = space.members.map(m => ({ id: m.id, user_id: m.id, display_name: m.name, role: m.role, revision: m.revision || 1 }))
-        return [{ items, next_cursor: null }, items.find(m => m.user_id === 'me') || null] as const
-      })() : await Promise.all([familyApi.members(space.id, more ? cursor : null), familyApi.me(space.id)])
+      const items = space.members.map(m => ({ id: m.id, user_id: m.userId || m.id, display_name: m.name, role: m.role, revision: m.revision || 1, avatar_file_id: m.avatarFileId }))
+      const page = { items, next_cursor: null }
+      const own = items.find(m => m.user_id === (mockEnabled ? 'me' : data.profile?.id)) || null
       if (run !== generation.current) return
       setMe(own)
       setMembers(old => more ? [...old, ...page.items.filter(m => !old.some(o => o.id === m.id))] : page.items)
@@ -47,7 +46,7 @@ export function FamilyMembers({ space, onLayoutChange }: { space: Space; onLayou
   useEffect(() => { onLayoutChange() }, [members, me, cursor, loading, loadError, error, onLayoutChange])
   const selected = members.find(m => m.id === selectedId)
   useEffect(() => { if (selected && !canManageMember(me, selected)) setSelectedId(null) }, [me, selected])
-  const run = (action: () => Promise<unknown>) => submit(async () => { try { await action() } finally { if (!mockEnabled) await load() } })
+  const run = (action: () => Promise<unknown>) => submit(async () => { try { await action() } finally { if (!mockEnabled) await refresh() } })
   const changeRole = async (member: FamilyMember, role: 'editor' | 'viewer' | 'remove') => {
     if (busy || loading || !canManageMember(me, member) || role === member.role) return
     const result = await Taro.showModal({

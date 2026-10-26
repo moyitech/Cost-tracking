@@ -13,7 +13,7 @@ import { lifecycleEvents } from '../../lifecycle'
 export default function Detail() {
   const layout = useAdaptiveLayout()
   const { params } = useRouter(); const { data, execute, loading, loadDetail, detailLoading, detailError, refresh } = useLedger()
-  useDidShow(() => { void refresh().then(() => { if (params.id) return loadDetail(params.id) }) })
+  useDidShow(() => { if (params.id) void loadDetail(params.id) })
   const item = data.items.find(i => i.id === params.id && !i.deleted)
   const [panel, setPanel] = useState<'edit' | 'expense' | 'dispose' | 'move' | null>(null)
   const [editingExpense, setEditingExpense] = useState<Expense | undefined>()

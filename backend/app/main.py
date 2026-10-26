@@ -26,6 +26,7 @@ from app.presets import router as presets_router
 from app.schemas import DevLogin, ErrorOut, TokenOut
 from app.security import DB, login
 from app.storage import CosStorage
+from app.sync import router as sync_router
 from app.wechat_codes import WechatCodes
 from app.worker import run_worker
 
@@ -171,6 +172,7 @@ def create_app(settings=None, engine=None, storage=None, clock=None):
     app.include_router(family_router)
     app.include_router(import_router)
     app.include_router(presets_router)
+    app.include_router(sync_router)
     return app
 
 

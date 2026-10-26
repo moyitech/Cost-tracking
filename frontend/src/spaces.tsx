@@ -3,7 +3,7 @@ import { Image, Text, View } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import { Action, choosePictures, ErrorNote, Field, Sheet, SymbolIcon, useSubmit } from './components'
 import { Space, roleLabels, uid } from './domain'
-import { fileUrl, mockEnabled } from './services'
+import { fileUrl, mockEnabled, readMediaEpoch, subscribeMedia } from './services'
 import { scannedInvitationPath } from './invitation-share'
 import { useLedger } from './store'
 import { cropAvatarImage, persistAvatarPreview } from './local-image'
@@ -14,6 +14,8 @@ import { hasAvatarChanges } from './avatar-draft'
 import './spaces.scss'
 
 export function LedgerAvatar({ kind = 'personal', src = '', fileId, size = '', fallback = '我' }: { kind?: Space['kind']; src?: string; fileId?: string; size?: 'small' | 'medium' | 'large' | ''; fallback?: string }) {
+  const [mediaEpoch, setMediaEpoch] = useState(readMediaEpoch)
+  useEffect(() => subscribeMedia(() => setMediaEpoch(readMediaEpoch())), [])
   const resource = `${src}:${fileId || ''}`
   const [image, setImage] = useState({ resource, url: src })
   const retried = useRef(false)
@@ -22,7 +24,7 @@ export function LedgerAvatar({ kind = 'personal', src = '', fileId, size = '', f
     setImage({ resource, url: src })
     if (fileId && !mockEnabled) void fileUrl(fileId).then(url => { if (active) setImage({ resource, url }) }).catch(() => {})
     return () => { active = false }
-  }, [resource])
+  }, [resource, mediaEpoch])
   const recover = () => {
     if (fileId && !mockEnabled && !retried.current) {
       retried.current = true

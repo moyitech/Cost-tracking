@@ -9,6 +9,8 @@ import { createPresetCatalog } from './image-preset-client'
 import { prepareItemInput } from './item-input'
 import { prepareUploadImage } from './local-image'
 import { AVATAR_IMAGE_OPTIONS, AVATAR_PROCESSING_VERSION, IMAGE_MAX_BYTES, IMAGE_MAX_EDGE, imageMime, isAvatarPurpose } from './image-processing'
+import { OfflineStorage } from './offline-storage'
+import { collectPages, OfflineSnapshot, SyncManifest } from './offline-sync'
 
 const STORAGE_KEY = 'objet-ledger:v1'
 export const mockEnabled = USE_MOCK
@@ -56,14 +58,84 @@ const query = (params: Record<string, string | number | undefined | null>) => {
 }
 const accessCache = new Map<string, { url: string; expires_at: string }>()
 const presetCatalog = createPresetCatalog(path => api.request(path))
+let offline: { user: string; storage: OfflineStorage; snapshot: OfflineSnapshot | null } | null = null
+const mediaPending = new Map<string, Promise<string>>()
+const originalPreviews = new Set<string>()
+const mediaListeners = new Set<() => void>(); const repairListeners = new Set<() => void>(); let mediaEpoch = 0
+export const subscribeMedia = (listener: () => void) => { mediaListeners.add(listener); return () => { mediaListeners.delete(listener) } }
+export const readMediaEpoch = () => mediaEpoch
+export const subscribeCacheRepair = (listener: () => void) => { repairListeners.add(listener); return () => { repairListeners.delete(listener) } }
+const notifyMedia = () => { mediaEpoch++; mediaListeners.forEach(listener => listener()) }
+export function offlineStorage() {
+  const user = accountId()
+  if (!user) throw new Error('首次使用需要联网登录')
+  if (offline?.user !== user) { offline?.storage.dispose(); offline = { user, storage: new OfflineStorage(API_BASE_URL, user, Taro), snapshot: null }; notifyMedia() }
+  return offline.storage
+}
+export function activateOfflineSnapshot(snapshot: OfflineSnapshot) {
+  offlineStorage(); const previous = offline!.snapshot?.manifest?.presets_version
+  offline!.snapshot = snapshot
+  if (previous !== snapshot.manifest?.presets_version) notifyMedia()
+}
+export async function clearOfflineAccount(user: string) {
+  const storage = offline?.user === user ? offline.storage : new OfflineStorage(API_BASE_URL, user, Taro)
+  if (offline?.user === user) offline = null
+  if (process.env.TARO_ENV === 'h5') { for (const url of originalPreviews) URL.revokeObjectURL(url); originalPreviews.clear() }
+  await storage.clear()
+}
+async function originalResource(signed: () => Promise<string>, preview: () => Promise<string>): Promise<string> {
+  const user = accountId()
+  try {
+    if (process.env.TARO_ENV === 'h5' && !navigator.onLine) return preview()
+    if (process.env.TARO_ENV === 'weapp' && (await Taro.getNetworkType()).networkType === 'none') return preview()
+    const url = await signed()
+    if (process.env.TARO_ENV === 'weapp') {
+      const result = await Taro.downloadFile({ url, timeout: 15000 })
+      if (result.statusCode !== 200) throw new Error('原图暂不可用')
+      if (user !== accountId()) throw new Error('账号已变化')
+      return result.tempFilePath
+    }
+    const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 15000)
+    try {
+      const response = await fetch(url, { signal: controller.signal })
+      if (!response.ok) throw new Error('原图暂不可用')
+      const blob = await response.blob()
+      if (!blob.size || !blob.type.startsWith('image/') || user !== accountId()) throw new Error('原图暂不可用')
+      const local = URL.createObjectURL(blob); originalPreviews.add(local); return local
+    } finally { clearTimeout(timer) }
+  } catch { if (user !== accountId()) throw new Error('账号已变化'); return preview() }
+}
+async function previewResource(key: string, signed: () => Promise<string>, force = false): Promise<string> {
+  const storage = offlineStorage(); const user = accountId(); const pendingKey = `${user}:${key}`
+  const pending = mediaPending.get(pendingKey); if (pending) return pending
+  const task = (async () => {
+    if (force) await storage.evictMedia(key)
+    const cached = await storage.mediaUrl(key)
+    if (cached) return cached
+    repairListeners.forEach(listener => listener())
+    const url = await signed()
+    return storage.cacheMedia(key, url)
+  })().finally(() => { mediaPending.delete(pendingKey) })
+  mediaPending.set(pendingKey, task); return task
+}
 export const listImagePresets = (force = false) => mockEnabled ? Promise.resolve(bundledPresets) : presetCatalog.list(force)
-export const imagePresetUrl = (id: string, force = false, size: 'preview' | 'original' = 'preview'): Promise<string> => mockEnabled
-  ? Promise.resolve(bundledPresets.find(p => p.id === id)?.src || '') : presetCatalog.url(id, force, size)
-export async function fileUrl(id: string, force = false): Promise<string> {
-  const cached = accessCache.get(id)
+export async function imagePresetUrl(id: string, force = false, size: 'preview' | 'original' = 'preview'): Promise<string> {
+  if (mockEnabled) return bundledPresets.find(p => p.id === id)?.src || ''
+  const key = `preset:${id}:${offline?.snapshot?.manifest?.preset_versions[id] || '1'}:preview`
+  const preview = () => previewResource(key, () => presetCatalog.url(id, force, 'preview'), size === 'preview' && force)
+  if (size === 'original') return originalResource(() => presetCatalog.url(id, force, size), preview)
+  return preview()
+}
+async function signedFileUrl(id: string, force: boolean, size: 'preview' | 'original'): Promise<string> {
+  const key = `${accountId()}:${id}:${size}`
+  const cached = accessCache.get(key)
   if (!force && cached && Date.parse(cached.expires_at) > Date.now() + 30000) return cached.url
-  const access = await api.request<{ url: string; expires_at: string }>(`/files/${id}/access`)
-  accessCache.set(id, access); return access.url
+  const access = await api.request<{ url: string; expires_at: string }>(`/files/${id}/access?size=${size}`)
+  accessCache.set(key, access); return access.url
+}
+export async function fileUrl(id: string, force = false, size: 'preview' | 'original' = 'preview'): Promise<string> {
+  const preview = () => previewResource(`file:${id}:preview-v1`, () => signedFileUrl(id, force, 'preview'), size === 'preview' && force)
+  return size === 'original' ? originalResource(() => signedFileUrl(id, force, size), preview) : preview()
 }
 async function hydrate(item: ApiItem): Promise<Item> {
   const result = apiItem(item)
@@ -73,8 +145,9 @@ async function hydrate(item: ApiItem): Promise<Item> {
   return result
 }
 export async function previewItemPictures(item: Item, attachmentsOnly = false) {
-  const main = attachmentsOnly ? '' : item.imagePresetId ? await imagePresetUrl(item.imagePresetId, true, 'original') : mockEnabled ? item.image : item.imageFileId ? await fileUrl(item.imageFileId, true) : ''
-  const attachments = mockEnabled ? (item.attachments || []).map(a => a.path) : await Promise.all((item.attachments || []).filter(a => a.fileId).map(a => fileUrl(a.fileId!, true)))
+  if (process.env.TARO_ENV === 'h5') { for (const url of originalPreviews) URL.revokeObjectURL(url); originalPreviews.clear() }
+  const main = attachmentsOnly ? '' : item.imagePresetId ? await imagePresetUrl(item.imagePresetId, true, 'original') : mockEnabled ? item.image : item.imageFileId ? await fileUrl(item.imageFileId, true, 'original') : ''
+  const attachments = mockEnabled ? (item.attachments || []).map(a => a.path) : await Promise.all((item.attachments || []).filter(a => a.fileId).map(a => fileUrl(a.fileId!, true, 'original')))
   const urls = [main, ...attachments].filter(Boolean)
   if (urls.length) await Taro.previewImage({ urls })
 }
@@ -90,6 +163,7 @@ export const familyApi = {
   preview: (token: string) => api.request<InvitationPreview>(`/invitations/${encodeURIComponent(token)}`),
 }
 export const remote = {
+  manifest: () => api.request<SyncManifest>('/sync/manifest'),
   async profile(): Promise<Profile> { const user = await api.request<{ id: string; display_name: string; avatar_file_id: string | null }>('/me'); return { id: user.id, displayName: user.display_name, avatarFileId: user.avatar_file_id || undefined } },
   async spaces() { const data = await api.request<{ items: Parameters<typeof apiSpace>[0][] }>('/spaces'); return data.items.map(apiSpace) },
   async items(space: string, filters: Filters, cursor?: string | null) {
@@ -99,9 +173,22 @@ export const remote = {
   async detail(id: string) { return hydrate(await api.request<ApiItem>(`/items/${id}`)) },
   summary: (space: string) => api.request<Summary>(`/spaces/${space}/summary`),
   analytics: (space: string) => api.request<Analytics>(`/spaces/${space}/analytics`),
-  async events(space: string, cursor?: string | null) { const page = await api.request<Page<ApiEvent>>(`/spaces/${space}/events` + query({ cursor })); return { items: page.items.map(apiEvent), cursor: page.next_cursor } },
+  async events(space: string, cursor?: string | null) { const page = await api.request<Page<ApiEvent>>(`/spaces/${space}/events` + query({ cursor, limit: 100 })); return { items: page.items.map(apiEvent), cursor: page.next_cursor } },
   async history(id: string, cursor?: string | null) { const page = await api.request<Page<ApiEvent>>(`/items/${id}/events` + query({ cursor })); return { items: page.items.map(apiEvent), cursor: page.next_cursor } },
-  async trash(space: string, cursor?: string | null) { const page = await api.request<Page<ApiItem>>(`/spaces/${space}/trash` + query({ cursor })); return { items: await Promise.all(page.items.map(hydrate)), cursor: page.next_cursor } },
+  async trash(space: string, cursor?: string | null) { const page = await api.request<Page<ApiItem>>(`/spaces/${space}/trash` + query({ cursor, limit: 100 })); return { items: page.items.map(apiItem), cursor: page.next_cursor } },
+}
+export async function fetchOfflineSpace(id: string, metadata: Space, valid: () => boolean) {
+  const [active, trash, events, members] = await Promise.all([
+    collectPages(cursor => remote.items(id, { q: '', status: 'all' }, cursor), valid),
+    collectPages(cursor => remote.trash(id, cursor), valid),
+    collectPages(cursor => remote.events(id, cursor), valid),
+    metadata.kind === 'family' ? collectPages(async cursor => { const page = await familyApi.members(id, cursor); return { items: page.items, cursor: page.next_cursor } }, valid) : Promise.resolve([]),
+  ])
+  const history = new Map<string, typeof events>()
+  for (const event of events) if (event.itemId) { const rows = history.get(event.itemId) || []; rows.push(event); history.set(event.itemId, rows) }
+  return { space: { ...metadata, members: members.map(m => ({ id: m.id, name: m.display_name, role: m.role, userId: m.user_id, revision: m.revision, avatarFileId: m.avatar_file_id || undefined })) },
+    items: [...active, ...trash].map(item => ({ ...item, history: history.get(item.id) || [] })),
+    remote: { events, eventsCursor: null, trashIds: trash.map(i => i.id), trashCursor: null } }
 }
 export type UploadCache = { space: string; path: string; purpose: string; processing?: string; id: string; ready: boolean; uploaded: boolean; url: string; headers: Record<string, string>; expires_at: string }
 export async function uploadImage(path: string, space: string, purpose: string, memory?: UploadCache[]): Promise<string> {

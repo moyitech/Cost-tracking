@@ -108,21 +108,24 @@ class CosStorage:
                 503, "SERVICE_UNAVAILABLE", "上传尚未完成或 COS 校验失败，请稍后重试"
             ) from None
 
-    def access_url(self, file):
-        return self._access_url(file.object_key)
+    def access_url(self, file, size="original"):
+        # COS CI reads its transform from the query *key*, not imageMogr2=<value>.
+        params = {"imageMogr2/thumbnail/1024x1024>/format/webp/quality/75": ""} if size == "preview" else {}
+        return self._access_url(file.object_key, params)
 
     def preset_url(self, preset, size):
         return self._access_url(
             preset.preview_object_key if size == "preview" else preset.object_key
         )
 
-    def _access_url(self, object_key):
+    def _access_url(self, object_key, params=None):
         try:
             return self.client.get_presigned_url(
                 Method="GET",
                 Bucket=self.settings.cos_bucket,
                 Key=object_key,
                 Expired=self.settings.cos_signed_url_ttl_seconds,
+                Params=params or {},
             )
         except ApiError:
             raise

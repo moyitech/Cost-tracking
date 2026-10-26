@@ -6,7 +6,7 @@ import '@nutui/nutui-react-taro/dist/es/packages/popup/style/css'
 import { AssetName, assets } from './assets'
 import { useAdaptiveLayout } from './layout'
 import { today } from './domain'
-import { fileUrl, imagePresetUrl, mockEnabled } from './services'
+import { fileUrl, imagePresetUrl, mockEnabled, readMediaEpoch, subscribeMedia } from './services'
 import { stablePixels } from './sheet-scroll'
 import { useSheetScroll } from './use-sheet-scroll'
 import { traceKeyboard } from './keyboard-trace'
@@ -32,6 +32,7 @@ const symbolPaths = {
   edit: '<path d="m15 5 4 4M4 20l4-1L20 7a2.8 2.8 0 0 0-4-4L4 15z"/>',
   camera: '<path d="M8 6l2-3h4l2 3h4v14H4V6z"/><circle cx="12" cy="13" r="4"/>',
   refresh: '<path stroke-width="1.7" d="M19.5 9A7.9 7.9 0 0 0 6.2 6.1L3.8 8.5M3.8 4.5v4h4M4.5 15a7.9 7.9 0 0 0 13.3 2.9l2.4-2.4M20.2 19.5v-4h-4"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/>',
 }
 export function SymbolIcon({ name }: { name: keyof typeof symbolPaths }) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1e3530" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${symbolPaths[name]}</svg>`
@@ -61,13 +62,15 @@ export function goBack() { if (Taro.getCurrentPages().length > 1) void Taro.navi
 export function Pill({ children, tone = '', dot = false }: PropsWithChildren<{ tone?: string; dot?: boolean }>) { return <View className={`pill ${tone}`}>{dot && <View className='dot' />}{children}</View> }
 export function Empty({ title = '还没有物品', text = '从一件珍惜的物品开始，记录它与你的时间。', children }: PropsWithChildren<{ title?: string; text?: string }>) { return <View className='empty'><Text className='empty-symbol'>◇</Text><Text className='empty-title'>{title}</Text>{text && <Text className='muted'>{text}</Text>}{children}</View> }
 export function Photo({ src, fileId, presetId, className = '' }: { src: string; fileId?: string; presetId?: string; className?: string }) {
+  const [mediaEpoch, setMediaEpoch] = useState(readMediaEpoch)
+  useEffect(() => subscribeMedia(() => setMediaEpoch(readMediaEpoch())), [])
   const [url, setUrl] = useState(src); const retried = useRef(false)
   const resource = `${presetId || ''}:${fileId || ''}:${src}`; const current = useRef(resource); current.current = resource
   useEffect(() => { let active = true; setUrl(presetId ? '' : src); retried.current = false
     const request = presetId ? imagePresetUrl(presetId) : !mockEnabled && fileId ? fileUrl(fileId) : undefined
     if (request) void request.then(value => { if (active) setUrl(value) }).catch(() => {})
     return () => { active = false }
-  }, [src, fileId, presetId])
+  }, [src, fileId, presetId, mediaEpoch])
   const recover = () => {
     if (mockEnabled || retried.current || (!presetId && !fileId)) return
     retried.current = true

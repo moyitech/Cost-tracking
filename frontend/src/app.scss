@@ -586,3 +586,23 @@ body .taro_page::-webkit-scrollbar { display: none; }
 .member-permission-check { color: #638353; flex-shrink: 0; }
 .member-remove { display: block; width: 100%; text-align: center; color: #b45d4b; font-size: 13px; margin: 13px 0 0; }
 @media (max-width: 350px) { .family-members-sheet > .sheet-heading { padding: 23px 18px; } .family-members-sheet .sheet-content { padding-left: 18px; padding-right: 18px; } .family-person { gap: 9px; } }
+.space-bar-actions { flex-shrink: 0; gap: 0; }
+.sync-info { position: relative; flex-shrink: 0; }
+.sync-info.is-open { z-index: 31; }
+.sync-info-button { width: 44px; min-width: 44px; height: 44px; min-height: 44px; border-radius: 50%; }
+.sync-info-button .symbol-icon { width: 18px; height: 18px; opacity: .65; }
+.sync-info-button:active, .sync-info.is-open .sync-info-button { background: #eaf0ec; }
+.sync-info.is-open .symbol-icon { opacity: 1; }
+.sync-popover { position: absolute; z-index: 1; top: calc(100% + 5px); right: 0; width: 236px; max-width: calc(100vw - 40px); padding: 15px 17px; border: 1px solid #e2e9e4; border-radius: 15px; background: #fff; box-shadow: 0 8px 28px rgba(30,53,48,.12); color: #1e3530; }
+.sync-popover::before { content: ''; position: absolute; top: -5px; right: 16px; width: 8px; height: 8px; border-left: 1px solid #e2e9e4; border-top: 1px solid #e2e9e4; background: #fff; transform: rotate(45deg); }
+.sync-popover-label { display: block; color: #627269; font-size: 12px; line-height: 1.6; }
+.sync-popover-time { display: block; margin-top: 5px; font-size: 14px; font-weight: 500; line-height: 1.6; overflow-wrap: anywhere; }
+@media (prefers-color-scheme: dark) {
+  .space-surface .sync-info-button:active, .space-surface .sync-info.is-open .sync-info-button { background: #233d32; }
+  .space-surface .sync-popover { background: #1d3029; border-color: #3e5549; color: #e6f1eb; }
+  .space-surface .sync-popover::before { background: #1d3029; border-color: #3e5549; }
+  .space-surface .sync-popover-label { color: #b5c7bc; }
+}
+.sync-error-detail { display: block; margin-top: 4px; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.sync-notice > view, .sync-notice > taro-view-core { flex: 1; min-width: 0; }
+.sync-notice .text-button { flex-shrink: 0; }

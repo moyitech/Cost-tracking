@@ -3809,6 +3809,20 @@
               "type": "string",
               "title": "File Id"
             }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "preview",
+                "original"
+              ],
+              "type": "string",
+              "default": "original",
+              "title": "Size"
+            }
           }
         ],
         "responses": {
@@ -7976,6 +7990,122 @@
           }
         }
       }
+    },
+    "/api/v1/sync/manifest": {
+      "get": {
+        "tags": [
+          "sync"
+        ],
+        "summary": "Manifest",
+        "operationId": "manifest_api_v1_sync_manifest_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncManifest"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request Entity Too Large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Precondition Required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -9983,6 +10113,24 @@
         ],
         "title": "SpaceOut"
       },
+      "SpaceVersion": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "version"
+        ],
+        "title": "SpaceVersion"
+      },
       "SpacesOut": {
         "properties": {
           "items": {
@@ -10058,6 +10206,46 @@
           "current_daily"
         ],
         "title": "SummaryOut"
+      },
+      "SyncManifest": {
+        "properties": {
+          "profile_version": {
+            "type": "string",
+            "title": "Profile Version"
+          },
+          "presets_version": {
+            "type": "string",
+            "title": "Presets Version"
+          },
+          "preset_versions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Preset Versions"
+          },
+          "spaces": {
+            "items": {
+              "$ref": "#/components/schemas/SpaceVersion"
+            },
+            "type": "array",
+            "title": "Spaces"
+          },
+          "checked_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Checked At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "profile_version",
+          "presets_version",
+          "preset_versions",
+          "spaces",
+          "checked_at"
+        ],
+        "title": "SyncManifest"
       },
       "TaskOut": {
         "properties": {

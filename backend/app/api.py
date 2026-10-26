@@ -410,11 +410,11 @@ def complete_upload(file_id: str, request: Request, db: DB, user: Auth):
 
 
 @router.get("/files/{file_id}/access", response_model=s.FileAccess, tags=["files"])
-def file_access(file_id: str, request: Request, db: DB, user: Auth):
+def file_access(file_id: str, request: Request, db: DB, user: Auth, size: Literal["preview", "original"] = "original"):
     file = db.get(StoredFile, file_id)
     file_allowed(db, user, file)
     return {
-        "url": request.app.state.storage.access_url(file),
+        "url": request.app.state.storage.access_url(file, size) if size == "preview" else request.app.state.storage.access_url(file),
         "expires_at": now()
         + timedelta(seconds=request.app.state.settings.cos_signed_url_ttl_seconds),
     }

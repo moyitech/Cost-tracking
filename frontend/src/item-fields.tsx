@@ -24,7 +24,7 @@ export function ItemFields({ input, amount, date, onInput, onAmount, onDate, onE
     } catch (e) { if (!String(e).includes('cancel')) onError('图片未能读取，请重试') }
   }
   const preview = async (attachment: NonNullable<ItemInput['attachments']>[number]) => {
-    try { const url = attachment.fileId ? await fileUrl(attachment.fileId) : attachment.path; await Taro.previewImage({ urls: [url] }) }
+    try { const url = attachment.fileId ? await fileUrl(attachment.fileId, true, 'original') : attachment.path; await Taro.previewImage({ urls: [url] }) }
     catch { onError('图片暂时无法打开，请重试') }
   }
   return <>

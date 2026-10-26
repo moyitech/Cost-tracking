@@ -189,3 +189,12 @@ COST_TRACKING_LIVE_AI=1 uv run pytest tests/test_ai_live.py::test_real_overlappi
 本次无数据库结构变更，新 token 长度为 32，旧 token 分享可继续预览／接受。发布先后端再前端；启动前仍按项目约定检查 Alembic head。真机需要分别验证扫码、分享卡片封面、冷启动登录及两个微信身份的确认加入，H5 不能代替。
 
 分享封面由 `GET /api/v1/assets/invitation-cover.png` 公开提供，文件位于 `app/assets/invitation-cover.png`，部署时必须包含该文件；图片不含用户数据，分享标题动态显示家庭名。微信返回 41030 表示目标版本未发布邀请页，接口映射为 `WECHAT_CODE_PAGE_UNAVAILABLE`。本机开发可设置 `WECHAT_CODE_ENV_VERSION=develop`；开发版扫码者仍需有开发／体验权限，面向普通好友使用正式版。
+
+
+## 离线同步
+
+`GET /api/v1/sync/manifest` 要求登录，使用单条 PostgreSQL 查询返回一致视图：个人资料摘要、已授权空间及字符串版本、预设目录摘要、预设图片版本和服务器 `checked_at`。只读请求不增加版本。迁移 `b7f105d2e690` 为 `spaces` 增加 `sync_revision`，数据库触发器在物品、支出、事件、成员、空间资料及相关用户头像/姓名变更的同一事务中更新空间版本；迁移物品使来源与目标空间同时失效，回滚不发布版本。
+
+客户端复用现有分页接口，取齐变更空间后再次核对 manifest，不将列表分页游标当作增量同步游标。成员移除直接从 manifest 的授权空间列表消失。缩略图接口 `GET /api/v1/files/{id}/access?size=preview` 沿用文件授权，默认 `size=original` 保持原行为。COS 图片变换必须把整个 `imageMogr2/thumbnail/1024x1024>/format/webp/quality/75` 作为签名查询键、值为空；`imageMogr2=<处理参数>` 会被 COS 忽略并返回原图。
+
+验证：后端完整回归 139 项通过，4 项外部服务测试默认跳过；同步专项覆盖版本、权限、迁移、回滚和签名参数。真实开发 COS 只读验证得到 1024×768 WebP（41,586 字节），原图为 1440×1080 PNG（1,119,514 字节）。本机开发库已升级到上述 head，开发 API `/health` 正常。

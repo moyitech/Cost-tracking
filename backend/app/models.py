@@ -41,6 +41,7 @@ class Space(Base):
     __table_args__ = (CheckConstraint("kind IN ('personal', 'family')"),)
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     name: Mapped[str] = mapped_column(String(100))
+    sync_revision: Mapped[int] = mapped_column(BigInteger, server_default="1", default=1)
     kind: Mapped[str] = mapped_column(String(20))
     avatar_file_id: Mapped[str | None] = mapped_column(
         ForeignKey("files.id", name="fk_spaces_avatar_file", use_alter=True)
