@@ -37,8 +37,9 @@
 .space-stat-value { font-size: 20px; font-weight: 600; color: var(--space-ink); font-variant-numeric: tabular-nums; }
 .space-stat-link { min-height: 57px; font-size: 13px; color: var(--space-accent); gap: 4px; }
 .space-stat-link .symbol-icon, .space-stat-members .symbol-icon { width: 15px; height: 15px; }
-// The identity card and management list sit as two quiet groups.
-.space-identity-card + .space-management-card { margin-top: 16px; }
+// The identity card and management list sit as two quiet groups, side by side
+// on wide windows (.is-wide in app.scss).
+.spaces-column + .spaces-column { margin-top: 16px; }
 .space-management-card { background: var(--space-surface, #fff); border: 1px solid var(--space-line, #e4ebe7); border-radius: 22px; padding: 0 17px; box-shadow: 0 5px 22px rgba(30,53,48,.035); }
 .space-management-row { display: flex; align-items: center; justify-content: flex-start; gap: 13px; width: 100%; min-height: 82px; position: relative; padding: 15px 0; text-align: left; }
 .space-management-row + .space-management-row::before { content: ''; position: absolute; top: 0; left: 45px; right: 0; height: 1px; background: var(--space-line, #e4ebe7); }
@@ -91,7 +92,7 @@
   .space-surface .brand { color: #e6f1eb; }
   .space-surface .space-selector, .space-surface .profile-button { background: #1d3029; border-color: #33483e; color: #e6f1eb; }
   .space-surface .refresh-button { color: #e6f1eb; }
-  .space-surface .space-bar .symbol-icon, .space-surface .spaces-page .symbol-icon { filter: brightness(0) invert(.92); }
+  .space-surface .space-bar .symbol-icon, .space-surface .header .symbol-icon, .space-surface .spaces-page .symbol-icon { filter: brightness(0) invert(.92); }
   .space-surface .ledger-avatar-family { background: #233d32; }
   .space-surface .wechat-capsule { background: #1d3029; border-color: #33483e; }
   .space-surface .wechat-capsule .icon { filter: brightness(0) invert(.92); }

@@ -22,7 +22,8 @@ export function Analysis({ items, onFilter }: { items: Item[]; onFilter: (filter
   const completeDisposed = disposed.filter(i => metrics(i).net !== null)
   const ranking = dailyRanking(items)
   const top = ranking[0]?.daily || 1
-  return <View className='page-content secondary-page analysis-page'><Text className='page-heading'>投入分析</Text>
+  // Wide windows set the overview beside the ranking; phones read them in this order.
+  return <View className='page-content secondary-page analysis-page'><Text className='page-heading'>投入分析</Text><View className='analysis-columns'><View className='analysis-column'>
     <View className='analysis-hero'>
       <Text className='analysis-label'>{unpriced ? '已知投入' : '累计投入'}</Text>
       <Amount className={`analysis-total ${money(known).length > 9 ? 'compact-amount' : ''}`} cents={known} />
@@ -41,6 +42,7 @@ export function Analysis({ items, onFilter }: { items: Item[]; onFilter: (filter
       <View className='stack-bar'>{counts.filter(c => c.count).map(c => <View key={c.status} className={`stack-segment segment-${c.status}`} style={{ width: `${c.count / items.length * 100}%` }} />)}</View>
       <View className='legend'>{counts.map(c => <Action key={c.status} className='legend-item legend-action' label={`${statusLabels[c.status]} ${c.count} 件，查看`} onClick={() => onFilter(c.status)}><View className={`legend-dot segment-${c.status}`} /><Text className='legend-label'>{statusLabels[c.status]}</Text><Text className='legend-count'>{c.count}</Text></Action>)}</View>
     </View>
+    </View>{(ranking.length > 0 || disposed.length > 0) && <View className='analysis-column'>
     {ranking.length > 0 && <View className='card analysis-card'>
       <Text className='analysis-card-title'>日均成本最高</Text>
       <View className='ranking'>{ranking.map(({ item, daily }) => <Action key={item.id} className='ranking-row' label={`${item.name}，日均 ${money(daily)} 元`} onClick={() => { void Taro.navigateTo({ url: `/pages/detail/index?id=${item.id}` }) }}>
@@ -52,6 +54,7 @@ export function Analysis({ items, onFilter }: { items: Item[]; onFilter: (filter
       <View className='disposal-copy'><Text className='analysis-card-title'>已处置实际成本</Text><Text className='analysis-asof'>{disposed.length} 件{disposed.length > completeDisposed.length ? ` · ${disposed.length - completeDisposed.length} 件待补充` : ''}</Text></View>
       <Amount className='disposal-amount' cents={completeDisposed.reduce((s, i) => s + metrics(i).net!, 0)} short /><Text className='timeline-chevron'>›</Text>
     </Action>}
+    </View>}</View>
   </View>
 }
 
@@ -85,6 +88,7 @@ export function Spaces({ space, onAvatar, onItems }: { space: Space; onAvatar: (
   const image = <LedgerAvatar kind={space.kind} src={own ? data.profile?.avatar : space.avatar} fileId={own ? data.profile?.avatarFileId : space.avatarFileId} />
   return <View className='page-content secondary-page spaces-page'>
     <Text className='page-heading'>空间</Text>
+    <View className='spaces-columns'><View className='spaces-column'>
     <View className='space-identity-card'>
       <View className='space-identity-main'>
         {space.role === 'admin' ? <Action className={`space-avatar-edit ${own ? '' : 'space-avatar-edit-family'}`} label={own ? '更换个人头像' : '更换家庭头像'} onClick={onAvatar}>{image}<View className='space-avatar-camera'><SymbolIcon name='camera' /></View></Action> : image}
@@ -92,6 +96,7 @@ export function Spaces({ space, onAvatar, onItems }: { space: Space; onAvatar: (
       </View>
       <View className='space-identity-stats'><Action className='space-stat-action' onClick={onItems}><Text className='space-stat-value'>{count}</Text><Text>件物品</Text></Action>{own ? <Action className='space-stat-link' onClick={onItems}>查看物品<SymbolIcon name='chevron' /></Action> : <Action className='space-stat-action space-stat-members' onClick={() => setModal('members')}>{members === undefined ? <Text>查看成员</Text> : <><Text className='space-stat-value'>{members}</Text><Text>位成员</Text></>}<SymbolIcon name='chevron' /></Action>}</View>
     </View>
+    </View><View className='spaces-column'>
     <View className='space-management-card'>
       {!own && <SpaceMenuRow icon='people' title='家庭成员与权限' trailing={members === undefined ? undefined : `${members} 位`} onClick={() => setModal('members')} />}
       {!own && space.role === 'admin' && <SpaceMenuRow icon='invite' title='邀请成员' onClick={() => setModal('invite')} />}
@@ -99,6 +104,7 @@ export function Spaces({ space, onAvatar, onItems }: { space: Space; onAvatar: (
     </View>
     <View className='space-privacy-note'><SymbolIcon name={own ? 'shield' : 'lock'} /><Text>{own ? '个人物品不会自动共享到家庭' : space.role === 'viewer' ? '你可以查看物品与记录，暂不支持编辑' : '这里只共享家庭物品，个人空间依然私密'}</Text></View>
     {mockEnabled && <View className='mock-notice'>本地演示 · 数据仅保存在此设备</View>}
+    </View></View>
     {modal && <Sheet title={{ trash: '回收站', members: '家庭成员', invite: '邀请成员' }[modal]} className={modal === 'members' ? 'family-members-sheet' : ''} heading={modal === 'members' ? <View className='members-heading'><Text className='members-family-name'>{space.name}</Text>{members !== undefined && <Text className='members-heading-caption'>{members} 位成员</Text>}</View> : undefined} onClose={() => { if (!busy) setModal(null) }}>
       {modal === 'trash' && <>{!canEdit(space) && <Text className='space-sheet-intro'>恢复需要编辑权限。</Text>}{deleted.map(item => <View key={item.id} className='restore-row'><Photo src={item.image} fileId={item.imageFileId} presetId={item.imagePresetId} /><Text className='restore-name'>{item.name}</Text>{canEdit(space) ? <Action className='secondary' loading={busy} onClick={() => void submit(async () => { await execute({ type: 'restore', id: item.id, revision: item.revision }) }, '已恢复')}>恢复</Action> : <Text className='muted small'>仅查看</Text>}</View>)}<ErrorNote message={pageError} />{moreLoading && <Text>正在读取回收站…</Text>}{!mockEnabled && remoteState.trashCursor && <Action className='secondary' loading={moreLoading} onClick={() => void loadMore('trash')}>加载更多</Action>}{!deleted.length && !moreLoading && !pageError && <Empty title='回收站是空的' text='移除的物品可以在这里找回。' />}</>}
       {modal === 'members' && <FamilyMembers space={space} onLayoutChange={sheetLayoutChanged} />}

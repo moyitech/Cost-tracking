@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { keyboardViewport, nativeLayout, sheetHeight, unoccludedWindow } from '../src/layout-metrics'
+import { keyboardViewport, nativeLayout, roomForFilterList, sheetHeight, unoccludedWindow, wideLayout } from '../src/layout-metrics'
 
 test('native navigation respects status bar, actual capsule and gesture inset', () => {
   const phone = nativeLayout({ windowWidth: 440, windowHeight: 956, screenHeight: 956, statusBarHeight: 59, safeArea: { bottom: 922 } }, { top: 65, left: 338, width: 88, height: 32 })
@@ -77,4 +77,20 @@ test('resize-before-keyboard and keyboard-before-resize retain the same unocclud
   assert.deepEqual(keyboardViewport(844, unoccludedWindow(base, initial).windowHeight, 0), { visibleHeight: 844, bottom: 0 })
   const rotated = unoccludedWindow(base, { windowWidth: 844, windowHeight: 390, screenHeight: 390 })
   assert.equal(rotated.windowHeight, 390)
+})
+
+test('unfolded foldables and tablets get the wide layout; phones keep theirs', () => {
+  assert.deepEqual([320, 390, 440, 639].map(windowWidth => wideLayout({ windowWidth }).wide), [false, false, false, false])
+  // Galaxy Z Fold portrait, Mate X6 inner, the Pura-series unfolded window in WeChat DevTools, iPad.
+  assert.deepEqual([640, 673, 717, 944, 1024].map(windowWidth => wideLayout({ windowWidth }).wide), [true, true, true, true, true])
+})
+
+test('the summary column lists its filters only when the window has room', () => {
+  // Pura-series unfolded window in WeChat DevTools: 669 tall under a 112px navigation area.
+  assert.equal(roomForFilterList(669, 112), true)
+  // Mate X6 inner portrait and landscape, iPad portrait.
+  assert.deepEqual([[781, 103], [717, 103], [1024, 68]].map(([height, header]) => roomForFilterList(height, header)), [true, true, true])
+  // Short PC windows keep the segmented control; a gesture inset counts against the room.
+  assert.equal(roomForFilterList(520, 44), false)
+  assert.equal(roomForFilterList(669, 112, 34), false)
 })

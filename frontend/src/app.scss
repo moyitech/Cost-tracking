@@ -404,7 +404,6 @@ button, taro-button-core { font-family: inherit; }
   .page-content, .detail-content, .import-content, .space-bar { width: 100%; max-width: 960px; margin-left: auto; margin-right: auto; }
   .nut-popup-bottom { width: 560px !important; left: 50% !important; margin-left: -280px; }
   .detail-content { max-width: 760px; }
-  .records-page { max-width: 760px; }
   .import-content { max-width: 760px; }
   // Constrain only the browser preview canvas; never apply desktop frame rules to weapp.
   body .page, body .taro_page { width: 100%; max-width: 960PX; margin: 0 auto; }
@@ -412,6 +411,41 @@ button, taro-button-core { font-family: inherit; }
   body .header { left: 50%; right: auto; transform: translateX(-50%); width: 100%; max-width: 960PX; }
   body .tab-bar, body .bottom-dock { left: 50%; right: auto; transform: translateX(-50%); width: 100%; max-width: 960PX; padding-left: 16px; padding-right: 16px; }
 }
+// Wide windows (.is-wide from 640px, see wideLayout in layout-metrics.ts): the
+// home summary keeps a phone-width column beside the waterfall, so items start
+// at the top; analysis and space panels pair up.
+.is-wide .home-layout { display: flex; flex-direction: row; align-items: flex-start; gap: 20px; }
+// homeLayout in masonry.ts mirrors this width.
+.is-wide .home-sidebar { flex: 0 0 40%; min-width: 264px; max-width: 320px; }
+.is-wide .home-main { flex: 1; min-width: 0; }
+.is-wide .home-main .masonry { margin-top: 0; }
+.is-wide .home-main .filter-chip-row { margin: 0 0 12px; }
+// A narrow column moves the pending link to its own line instead of cutting the count.
+.is-wide .summary-meta { flex-wrap: wrap; row-gap: 8px; }
+// The navigation bar carries the space switcher and its tools (Home passes them
+// to Header), so content starts right under it. The brand and switcher span the
+// summary column (headerLeadingWidth), the switcher flush with its right edge.
+.header .space-selector.space-selector-refined { max-width: 240px; }
+.header-leading > .space-selector { margin-left: auto; }
+.header-actions { margin-left: auto; }
+// With room to spare the filters stack as a list, the way a sidebar offers its sections.
+.sidebar-list .status-tabs { flex-direction: column; gap: 2px; padding: 0; background: transparent; box-shadow: none; }
+.sidebar-list .status-tabs .action { justify-content: space-between; min-height: 44px; padding: 0 12px 0 16px; border-radius: 14px; font-size: 14px; }
+// The items tab fills the window and its panes scroll on their own (Pane in
+// pages/index). The summary column is a full-height panel ending above the
+// tab bar, so its open space reads as part of the sidebar; the waterfall runs
+// under the tab bar and its end clears it.
+.home-split { height: 100vh; padding-bottom: 0; overflow: hidden; display: flex; flex-direction: column; }
+.home-split .home-layout { flex: 1; min-height: 0; align-items: stretch; margin-top: 12px; }
+.home-split .home-main .sync-notice { margin: 0 0 12px; }
+.home-split .home-sidebar { margin-bottom: calc(68px + var(--safe-bottom, env(safe-area-inset-bottom, 0px))); border-radius: 24px; background: #eef3f0; }
+.home-split .home-sidebar .pane-body { padding: 12px; }
+.home-split .home-main .pane-body { padding-bottom: calc(72px + var(--safe-bottom, env(safe-area-inset-bottom, 0px))); }
+body .home-split .home-sidebar, body .home-split .home-main { scrollbar-width: none; }
+body .home-split .home-sidebar::-webkit-scrollbar, body .home-split .home-main::-webkit-scrollbar { display: none; }
+.is-wide .analysis-columns, .is-wide .spaces-columns { display: flex; align-items: flex-start; gap: 16px; }
+.is-wide .analysis-column, .is-wide .spaces-column { flex: 1 1 0; min-width: 0; }
+.is-wide .spaces-column + .spaces-column { margin-top: 0; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 
 .web-picker { width: 100%; min-width: 0; min-height: 36px; border: 0; padding: 6px 2px; background: transparent; color: #263e33; font: inherit; font-size: 16px; box-sizing: border-box; }

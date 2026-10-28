@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Input, Text, View } from '@tarojs/components'
+import { PropsWithChildren, useEffect, useMemo, useRef, useState } from 'react'
+import { Input, ScrollView, Text, View } from '@tarojs/components'
 import Taro, { useDidHide, usePullDownRefresh, useRouter, useShareAppMessage } from '@tarojs/taro'
 import { Action, Amount, choosePictures, Empty, ErrorNote, Header, Icon, Photo, Pill, SymbolIcon } from '../../components'
 import { canEdit, completionHint, isDisposed, isIncompleteHolding, Item, metrics, missingFields, money, moneyShort, newestItemsFirst, spaceDaily, statusLabels } from '../../domain'
-import { distribute, estimateCardHeight, homeContentWidth, masonryCardWidth, masonryColumns } from '../../masonry'
+import { distribute, estimateCardHeight, headerLeadingWidth, homeLayout, masonryCardWidth, masonryColumns } from '../../masonry'
 import type { ItemFilter } from '../../domain'
 import { ItemForm } from '../../forms'
 import { useAdaptiveLayout } from '../../layout'
+import { roomForFilterList } from '../../layout-metrics'
 import { useLedger } from '../../store'
 import { stageImportPictures } from '../../import-selection'
 import { GlassTabBar, Tab } from '../../glass-tab-bar'
@@ -29,6 +30,7 @@ export default function Home() {
   const [avatarTarget, setAvatarTarget] = useState<{ scope: Space['kind']; spaceId: string } | null>(null)
   const [query, setQuery] = useState(''); const [status, setStatus] = useState<ItemFilter>('all')
   const pickerLock = useRef(false); const [picking, setPicking] = useState(false); const [pickerError, setPickerError] = useState('')
+  const [paneRefreshing, setPaneRefreshing] = useState(false)
   useDidHide(() => setSyncInfoOpen(false))
   useEffect(() => { setSyncInfoOpen(false) }, [tab, spaceId, spaceMenu, adding, avatarTarget])
   useEffect(() => {
@@ -70,8 +72,8 @@ export default function Home() {
     const matchStatus = status === 'all' || (status === 'history' ? isDisposed(item) : status === 'incomplete' ? isIncompleteHolding(item) : status === 'unpriced' ? item.purchaseAmount === null : item.status === status)
     return matchStatus && item.name.toLowerCase().includes(search.toLowerCase())
   })), [items, status, search])
-  const contentWidth = homeContentWidth(layout.window.windowWidth)
-  const columnCount = masonryColumns(contentWidth); const cardWidth = masonryCardWidth(contentWidth, columnCount)
+  const { gridWidth } = homeLayout(layout.window.windowWidth)
+  const columnCount = masonryColumns(gridWidth); const cardWidth = masonryCardWidth(gridWidth, columnCount)
   const columns = distribute(filtered, columnCount, item => estimateCardHeight({ name: item.name, hint: completionHint(missingFields(item)) }, cardWidth))
   // A filter whose items have all been completed or restored falls back to all.
   const emptyFilter = (status === 'incomplete' && !daily.incomplete) || (status === 'unpriced' && !incomplete)
@@ -79,12 +81,25 @@ export default function Home() {
   const segment = status === 'incomplete' ? 'active' : status === 'sold' || status === 'retired' ? 'history' : status === 'unpriced' ? 'all' : status
   useEffect(() => { if (emptyFilter) setStatus('all') }, [emptyFilter])
   const showItems = (filter: ItemFilter) => { setTab('items'); setQuery(''); setStatus(filter) }
-  return <View className={`page home-page ${tab === 'spaces' ? 'space-surface' : ''}`} style={layout.style} onClick={() => setSyncInfoOpen(false)} onTouchMove={syncInfoOpen ? () => setSyncInfoOpen(false) : undefined}>
-    <Header hideProfile />
-    <View className='space-bar'><Action className='space-selector space-selector-refined' label={`${space?.name || '正在读取'}，展开全部空间`} expanded={spaceMenu} onClick={() => setSpaceMenu(true)}><LedgerAvatar kind={space?.kind} src={space?.kind === 'personal' ? data.profile?.avatar : space?.avatar} fileId={space?.kind === 'personal' ? data.profile?.avatarFileId : space?.avatarFileId} size='small' /><Text className='space-selector-name'>{space?.name || '正在读取'}</Text><SymbolIcon name='down' /></Action><View className='row space-bar-actions'>{!writable && tab !== 'spaces' && <Pill>仅可查看</Pill>}<SyncInfo lastSyncedAt={lastSyncedAt} open={syncInfoOpen} onToggle={() => setSyncInfoOpen(value => !value)} /><Action className='refresh-button' label='刷新当前空间' loading={loading} onClick={() => void refresh()}>{!loading && <SymbolIcon name='refresh' />}</Action></View></View>
-    {!ready && !error ? <View className='page-content loading-skeleton' ariaLabel='正在加载物品'><View className='skeleton-summary' /><View className='masonry'>{[0, 1].map(column => <View className='masonry-column' key={column}>{[0, 1].map(i => <View className='skeleton-card' key={i} />)}</View>)}</View></View> : !ready && error ? <Empty title='档案暂时无法读取' text={error}><Action className='primary' onClick={() => void refresh()}>重新加载</Action></Empty> : <>
-      {error && <View className='sync-notice'><View><Text>同步失败，已保留本地内容</Text><Text className='sync-error-detail'>{error}</Text></View><Action className='text-button' onClick={() => void refresh()}>重试</Action></View>}
-      {tab === 'items' && <View className='page-content' style={layout.style}>
+  // Wide windows show the items tab as two panes that scroll on their own.
+  // Tall ones have room to list the filters down the sidebar.
+  const split = layout.wide && tab === 'items'
+  const sidebarList = split && roomForFilterList(layout.window.windowHeight, layout.headerHeight, layout.safeBottom)
+  const refreshPane = () => { setPaneRefreshing(true); void refresh().finally(() => setPaneRefreshing(false)) }
+  // The chip names the waterfall's current filter: under the segments on
+  // phones, at the head of the waterfall on wide windows.
+  const filterChip = chipLabels[status] && <View className='filter-chip-row'><Action className='filter-chip' label={`清除${chipLabels[status]}筛选`} onClick={() => setStatus('all')}><Text>{chipLabels[status]} · {filtered.length}</Text><Text className='filter-chip-close'>✕</Text></Action></View>
+  // Wide windows carry the space switcher and its tools in the navigation bar,
+  // whose row is otherwise empty between the brand and the WeChat capsule.
+  const spaceSelector = <Action className='space-selector space-selector-refined' label={`${space?.name || '正在读取'}，展开全部空间`} expanded={spaceMenu} onClick={() => setSpaceMenu(true)}><LedgerAvatar kind={space?.kind} src={space?.kind === 'personal' ? data.profile?.avatar : space?.avatar} fileId={space?.kind === 'personal' ? data.profile?.avatarFileId : space?.avatarFileId} size='small' /><Text className='space-selector-name'>{space?.name || '正在读取'}</Text><SymbolIcon name='down' /></Action>
+  const spaceActions = <View className='row space-bar-actions'>{!writable && tab !== 'spaces' && <Pill>仅可查看</Pill>}<SyncInfo lastSyncedAt={lastSyncedAt} open={syncInfoOpen} onToggle={() => setSyncInfoOpen(value => !value)} /><Action className='refresh-button' label='刷新当前空间' loading={loading} onClick={() => void refresh()}>{!loading && <SymbolIcon name='refresh' />}</Action></View>
+  // In the split view the notice heads the waterfall, keeping the summary panel's height steady.
+  const syncNotice = error && <View className='sync-notice'><View><Text>同步失败，已保留本地内容</Text><Text className='sync-error-detail'>{error}</Text></View><Action className='text-button' onClick={() => void refresh()}>重试</Action></View>
+  return <View className={`page home-page ${layout.wide ? 'is-wide' : ''} ${split ? 'home-split' : ''} ${sidebarList ? 'sidebar-list' : ''} ${tab === 'spaces' ? 'space-surface' : ''}`} style={layout.style} onClick={() => setSyncInfoOpen(false)} onTouchMove={syncInfoOpen ? () => setSyncInfoOpen(false) : undefined}>
+    {layout.wide ? <Header hideProfile leading={spaceSelector} leadingWidth={headerLeadingWidth(layout.window.windowWidth, process.env.TARO_ENV === 'weapp')} actions={spaceActions} /> : <><Header hideProfile /><View className='space-bar'>{spaceSelector}{spaceActions}</View></>}
+    {!ready && !error ? <View className='page-content home-layout loading-skeleton' ariaLabel='正在加载物品'><View className='home-sidebar'><View className='skeleton-summary' /></View><View className='home-main'><View className='masonry'>{Array.from({ length: columnCount }, (_, column) => <View className='masonry-column' key={column}>{[0, 1].map(i => <View className='skeleton-card' key={i} />)}</View>)}</View></View></View> : !ready && error ? <Empty title='档案暂时无法读取' text={error}><Action className='primary' onClick={() => void refresh()}>重新加载</Action></Empty> : <>
+      {!split && syncNotice}
+      {tab === 'items' && <View className='page-content home-layout' style={layout.style}><Pane scroll={split} className='home-sidebar'>
         <View className='summary-card'>
           <Action className='summary-main' label={`${daily.incomplete ? '已知日均投入' : '日均持有成本'}${allUnknown ? '待补充' : ` ${money(daily.amount)} 元每天`}，查看在用物品`} onClick={() => showItems('active')}>
             <View className='summary-label'><Text>{daily.incomplete ? '已知日均投入' : '日均持有成本'}</Text><Text className='summary-chevron'>›</Text></View>
@@ -95,13 +110,16 @@ export default function Home() {
         <View className='entry-actions'><Action className='primary' label='AI 识别，支持多张截图' disabled={!writable} loading={picking} onClick={() => void startImport()}><Icon name='home-container1' /><Text>AI 识别</Text></Action><Action className='secondary' disabled={!writable} onClick={() => setAdding(true)}><Icon name='home-container2' /><Text>手动添加</Text></Action></View>
         <ErrorNote message={pickerError} /><View className='search-box'><Icon name='home-icon' /><Input ariaLabel='搜索商品名' placeholder='搜索商品名' value={query} onInput={e => setQuery(e.detail.value)} />{query && <Action className='search-clear' label='清除搜索' onClick={() => setQuery('')}>×</Action>}</View>
         <View className='status-tabs'>{([['all', '全部', itemCount], ['active', '在用', activeCount], ['history', '已处置', historyCount]] as const).map(([key, label, count]) => <Action key={key} className={segment === key ? 'selected' : ''} label={`${label}，${count} 件${segment === key ? '，已选中' : ''}`} onClick={() => setStatus(key)}><Text className='status-label'>{label}</Text><Text className='status-count'>{count > 999 ? '999+' : count}</Text></Action>)}</View>
-        {chipLabels[status] && <View className='filter-chip-row'><Action className='filter-chip' label={`清除${chipLabels[status]}筛选`} onClick={() => setStatus('all')}><Text>{chipLabels[status]} · {filtered.length}</Text><Text className='filter-chip-close'>✕</Text></Action></View>}
+        {!layout.wide && filterChip}
+      </Pane><Pane scroll={split} className='home-main' refreshing={paneRefreshing} onRefresh={refreshPane}>
+        {split && syncNotice}
+        {layout.wide && filterChip}
         {filtered.length > 0 && <View className='masonry'>{columns.map((column, i) => <View className='masonry-column' key={i}>{column.map(item => <ItemCard item={item} key={item.id} />)}</View>)}</View>}
         {!filtered.length && (search
           ? <Empty title={`没有找到「${search}」`} text=''><Action className='secondary' onClick={() => setQuery('')}>清除搜索</Action></Empty>
           : <Empty title={itemCount ? '没有符合条件的物品' : '给物品一个有迹可循的家'} text={itemCount ? '' : '从手动添加第一件物品开始。'}>{!itemCount && writable && <Action className='secondary' onClick={() => setAdding(true)}>添加第一件物品</Action>}</Empty>)}
         <ErrorNote message={pageError} />
-      </View>}
+      </Pane></View>}
       {tab === 'analysis' && <Analysis items={items} onFilter={showItems} />}
       {tab === 'records' && <Records items={items} />}
       {tab === 'spaces' && space && <Spaces space={space} onItems={() => showItems('all')} onAvatar={() => setAvatarTarget({ scope: space.kind, spaceId: space.id })} />}
@@ -111,6 +129,13 @@ export default function Home() {
     {avatarTarget && <AvatarEditor key={`${avatarTarget.scope}:${avatarTarget.spaceId}`} {...avatarTarget} onClose={() => setAvatarTarget(null)} />}
     {adding && <ItemForm onClose={() => setAdding(false)} />}
   </View>
+}
+
+// A pane of the wide items tab scrolls by itself, so moving the waterfall
+// never drags the summary column; phones keep a single page scroll.
+function Pane({ scroll, className, refreshing, onRefresh, children }: PropsWithChildren<{ scroll: boolean; className: string; refreshing?: boolean; onRefresh?: () => void }>) {
+  if (!scroll) return <View className={className}>{children}</View>
+  return <ScrollView className={className} scrollY enhanced showScrollbar={false} refresherEnabled={!!onRefresh} refresherTriggered={refreshing} refresherBackground='#f7f9f8' onRefresherRefresh={onRefresh}><View className='pane-body'>{children}</View></ScrollView>
 }
 
 function ItemCard({ item }: { item: Item }) {

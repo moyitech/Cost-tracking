@@ -1,6 +1,16 @@
 export type WindowMetrics = { windowWidth: number; windowHeight: number; screenHeight: number; statusBarHeight?: number; safeArea?: { bottom: number } }
 export type MenuMetrics = { top: number; left: number; width: number; height: number }
 
+// From 640px (unfolded foldables, tablets, wide PC windows) pages set their
+// sections side by side (.is-wide in app.scss) instead of stretching the phone layout.
+export const WIDE_WINDOW = 640
+export const wideLayout = (window: Pick<WindowMetrics, 'windowWidth'>) => ({ wide: window.windowWidth >= WIDE_WINDOW })
+// The wide summary column lists its filters when the window leaves room below
+// the navigation bar; shorter windows keep the segmented control. The listed
+// panel content is about 443px; the panel also gives up a 12px top gap and
+// 68px plus the gesture inset above the tab bar (app.scss, .home-split).
+export const roomForFilterList = (windowHeight: number, headerHeight: number, safeBottom = 0) => windowHeight - headerHeight - safeBottom >= 535
+
 export function nativeLayout(window: WindowMetrics, menu?: MenuMetrics) {
   const statusTop = Math.max(0, window.statusBarHeight || 0)
   const validMenu = !!menu && menu.height > 0 && menu.width > 0 && menu.top >= statusTop && menu.left > 0 && menu.left + menu.width <= window.windowWidth

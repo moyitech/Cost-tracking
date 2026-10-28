@@ -54,13 +54,14 @@ export function Amount({ cents, unit, short = false, className = '', empty = '�
   const sign = cents < 0 ? '-' : ''
   return <View className={`amount ${className}`} ariaLabel={`${sign}${text}元${unit === '/天' ? '每天' : ''}`}><Text className='amount-currency'>{sign}¥</Text><Text className='amount-integer'>{integer}</Text>{fraction && <Text className='amount-fraction'>.{fraction}</Text>}{unit && <Text className='amount-unit'>{unit}</Text>}</View>
 }
-export function Header({ title, back = false, detail = false, onBack, onProfile, actions, hideProfile = false, profile, profileLabel }: { title?: string; back?: boolean; detail?: boolean; onBack?: () => void; onProfile?: () => void; actions?: ReactNode; hideProfile?: boolean; profile?: ReactNode; profileLabel?: string }) {
+export function Header({ title, back = false, detail = false, onBack, onProfile, leading, leadingWidth, actions, hideProfile = false, profile, profileLabel }: { title?: string; back?: boolean; detail?: boolean; onBack?: () => void; onProfile?: () => void; leading?: ReactNode; leadingWidth?: number; actions?: ReactNode; hideProfile?: boolean; profile?: ReactNode; profileLabel?: string }) {
   const native = process.env.TARO_ENV === 'weapp'
   const layout = useAdaptiveLayout()
   return <><View className={`header ${detail ? 'detail-header' : ''}`} style={{ paddingTop: native ? `${layout.statusTop}px` : 'env(safe-area-inset-top, 0px)' }}>
-    <View className='header-inner' style={native ? { height: `${layout.navHeight}px`, paddingRight: `${layout.capsuleRight}px` } : undefined}><View className='row header-leading'>
+    <View className='header-inner' style={native ? { height: `${layout.navHeight}px`, paddingRight: `${layout.capsuleRight}px` } : undefined}><View className='row header-leading' style={leadingWidth ? { flex: `0 0 ${leadingWidth}px` } : undefined}>
       {back && <Action className='back-button' label='返回' onClick={onBack || goBack}><Icon name={detail ? 'detail-container16' : 'import-container21'} /></Action>}
       {title ? <Text className='header-title'>{title}</Text> : !detail && <View className='brand' ariaLabel='用本'><Text>用</Text><View className='brand-last'><Text>本</Text></View></View>}
+      {leading}
     </View>
     {actions && <View className='header-actions'>{actions}</View>}
     {!detail && <View className={`row header-controls ${native ? 'native-controls' : ''}`}>

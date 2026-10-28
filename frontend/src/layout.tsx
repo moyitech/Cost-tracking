@@ -1,6 +1,6 @@
 import { createContext, CSSProperties, PropsWithChildren, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import Taro from '@tarojs/taro'
-import { keyboardViewport, nativeLayout, sheetHeight, unoccludedWindow, WindowMetrics } from './layout-metrics'
+import { keyboardViewport, nativeLayout, sheetHeight, unoccludedWindow, wideLayout, WindowMetrics } from './layout-metrics'
 import { stablePixels } from './sheet-scroll'
 import { KeyboardSession } from './keyboard-session'
 import { traceKeyboard } from './keyboard-trace'
@@ -106,7 +106,7 @@ function useLayoutState() {
     '--sheet-safe-bottom': keyboardOpen ? '0px' : 'var(--safe-bottom)',
     ...(native ? { '--header-height': `${metrics.headerHeight}px` } : {}),
   } as CSSProperties
-  return { ...metrics, style, sheetHeight: height, sheetBottom: bottom, compactHeight: viewport.visibleHeight < 480, keyboardOpen, keyboardField: field,
+  return { ...metrics, ...wideLayout(metrics.window), style, sheetHeight: height, sheetBottom: bottom, compactHeight: viewport.visibleHeight < 480, keyboardOpen, keyboardField: field,
     focusKeyboard, blurKeyboard, clearKeyboard }
 }
 export function LayoutProvider({ children }: PropsWithChildren) { const value = useLayoutState(); return <LayoutContext.Provider value={value}>{children}</LayoutContext.Provider> }
